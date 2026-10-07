@@ -3,8 +3,8 @@
 Write a computation once and run it synchronously or cooperatively, giving the
 event loop time to handle input and rendering between chunks of work.
 
-The examples use this checkout's source paths. The package currently points at
-an `index.js` that has not been built; there is no build script yet.
+The examples use this checkout's source paths. Run `npm test` with Node.js 24+
+to test them, or `npm run build` to compile the source into `dist`.
 
 ## Write a schedulable function
 
@@ -12,7 +12,8 @@ Use a regular generator with `makeSchedulable`. Check the scheduling signal
 inside expensive loops and yield when its time budget is used up.
 
 ```ts
-import { makeSchedulable, runWithScheduler, scheduler } from "./src/index.ts";
+import { makeSchedulable, runWithScheduler } from "./src/index.ts";
+import * as scheduler from "./src/index.ts";
 import type { SchedulableIterable } from "./src/types.ts";
 
 const sum = makeSchedulable(function* sum(
