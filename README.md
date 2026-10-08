@@ -31,7 +31,6 @@ const sum = makeSchedulable(function* sum(
 });
 
 sum([1, 2, 3]);                          // 6, synchronously
-sum.sync([1, 2, 3]);                     // also 6, synchronously
 await runWithScheduler(sum, [[1, 2, 3]]); // 6, cooperatively
 ```
 
@@ -65,12 +64,7 @@ Use `yield` for `scheduler.yieldNow`, and `yield*` for `execute` and `syncAware`
 An unconditional `yield scheduler.yieldNow` forces an event-loop break in
 scheduled mode; it is ignored in synchronous mode.
 
-## Keep an existing synchronous implementation
-
-`asSchedulable(existingFn, generatorFn)` attaches a schedulable implementation
-without changing what a direct call to `existingFn` does. It returns nothing.
-`runWithScheduler(existingFn, args)` uses the generator, and `existingFn.sync`
-runs that generator synchronously. Keep both implementations equivalent.
+## Use separate sync and async implementations
 
 For dependencies with separate sync and async entry points, use `syncAware`:
 

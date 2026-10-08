@@ -15,7 +15,6 @@ const sum = makeSchedulable(function* (values: number[]): SchedulableIterable<nu
 
 test("sum runs synchronously", () => {
   assert.equal(sum([1, 2, 3]), 6);
-  assert.equal(sum.sync([1, 2, 3]), 6);
 });
 
 test("sum runs with the scheduler", async () => {

@@ -1,4 +1,3 @@
-export { asSchedulable } from "./asSchedulable.ts";
 export { makeSchedulable } from "./makeSchedulable.ts";
 export { execute, syncAware, yieldNow } from "./commands.ts";
 export type { Command } from "./commands.ts";
