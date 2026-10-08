@@ -94,7 +94,7 @@ function executeIterableAsync<T>(
           }
           if (isSchedulableFunction(fn)) {
             nextArg = await executeIterableAsync(
-              fn[schedulableImplementationSignal](...args),
+              fn[schedulableImplementationSignal].apply(thisArg, args),
               scheduleSignal,
             );
             // we are just back from an async call, so we don't need to yield again for a while

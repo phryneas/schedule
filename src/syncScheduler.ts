@@ -49,7 +49,7 @@ export function executeIterableSync<T>(iterable: SchedulableIterable<T>): T {
       case "execute": {
         const { fn, args, this: thisArg } = result.value;
         nextArg = isSchedulableFunction(fn)
-          ? executeIterableSync(fn[schedulableImplementationSignal](...args))
+          ? executeIterableSync(fn[schedulableImplementationSignal].apply(thisArg, args))
           : fn.apply(thisArg, args);
         break;
       }
