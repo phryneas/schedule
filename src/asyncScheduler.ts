@@ -12,6 +12,9 @@ export function asyncScheduler<Ret, Args extends Array<unknown>>(
   args: Args,
   abortSignal?: AbortSignal | ScheduleSignal,
 ): Promise<Ret> {
+  if (context.signal !== undefined || context.inSyncAware) {
+    throw new Error("Cannot start a scheduler inside a scheduler. Use execute() to compose schedulable functions.");
+  }
   if (!isSchedulableFunction(fn)) {
     // eslint-disable-next-line no-undef, no-console
     console?.warn("Running a non-schedulable function with asyncScheduler!");
@@ -72,13 +75,12 @@ function chunkedScheduler<T>(
     let nextArg: unknown;
     do {
       let result: IteratorResult<Command, T>;
-      const previousSignal = context.signal;
       try {
         context.signal = scheduleSignal;
         result = iterator.next(nextArg);
         nextArg = undefined;
       } finally {
-        context.signal = previousSignal;
+        context.signal = undefined;
       }
       if (result.done) {
         return result.value as Awaited<T>;
@@ -105,7 +107,12 @@ function chunkedScheduler<T>(
             // we are just back from an async call, so we don't need to yield again for a while
             scheduleSignal.bump();
           } else {
-            nextArg = fn.apply(thisArg, args);
+            try {
+              context.signal = scheduleSignal;
+              nextArg = fn.apply(thisArg, args);
+            } finally {
+              context.signal = undefined;
+            }
           }
           continue;
         }
@@ -116,7 +123,15 @@ function chunkedScheduler<T>(
             yield;
             scheduleSignal.bump();
           }
-          nextArg = await async.apply(thisArg, args);
+          let pending: unknown;
+          try {
+            context.inSyncAware = true;
+            pending = async.apply(thisArg, args);
+          } finally {
+            // Clear before awaiting: other runs may start while this one waits.
+            context.inSyncAware = false;
+          }
+          nextArg = await pending;
           // we are just back from an async call, so we don't need to yield again for a while
           scheduleSignal.bump();
           continue;

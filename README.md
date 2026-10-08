@@ -56,9 +56,8 @@ const sumBatches = makeSchedulable(function* sumBatches(
 });
 ```
 
-Schedulable callees share the caller's scheduling signal. Ordinary functions
-and callbacks also work, but run uninterrupted once called. Calling `sum(batch)`
-directly would run that entire nested computation synchronously.
+Use `execute` to compose schedulable functions inside a generator. Ordinary
+functions and callbacks also work, but run uninterrupted once called.
 
 Use `yield` for `scheduler.yieldNow`, and `yield*` for `execute` and `syncAware`.
 An unconditional `yield scheduler.yieldNow` forces an event-loop break in
@@ -69,21 +68,38 @@ scheduled mode; it is ignored in synchronous mode.
 For dependencies with separate sync and async entry points, use `syncAware`:
 
 ```ts
-const sumViaDependency = makeSchedulable(function* sumViaDependency(
-  values: number[],
+import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+const sumFile = makeSchedulable(function* sumFile(
+  directory: string,
+  filename: string,
 ): SchedulableIterable<number> {
-  return yield* scheduler.syncAware({
-    sync: sum,
-    async: (input: number[]) => asyncScheduler(sum, [input]),
-    args: [values],
+  const signal = scheduler.getSignal();
+
+  const filePath = join(directory, filename);
+  
+  const contents = yield* scheduler.syncAware({
+    sync: (file: string) => readFileSync(file, "utf8"),
+    async: (file: string) => readFile(file, "utf8"),
+    args: [filePath],
   });
+
+  let total = 0;
+  for (const line of contents.split(/\r?\n/)) {
+    if (signal.shouldYield) {
+      yield scheduler.yieldNow;
+    }
+    total += Number(line);
+  }
+  return total;
 });
 ```
 
-The sync runner chooses `sync`; the scheduled runner awaits `async`. This is
-also useful for separate memoized sync and async implementations.
-Cancellation propagation through nested `asyncScheduler` calls is currently
-incomplete; see [TODOs](TODOs.md).
+A direct call to `sumFile` reads the file synchronously. Running it with
+`asyncScheduler` uses the non-blocking `readFile` and lets the summing loop yield
+as needed. Call `getSignal()` in your generator, as shown above.
 
 ## Cancel stale work
 
