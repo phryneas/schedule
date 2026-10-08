@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { makeSchedulable, runWithScheduler, yieldNow } from "../src/index.ts";
+import { makeSchedulable, asyncScheduler, yieldNow } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
 test("yieldNow pauses scheduled execution", async () => {
@@ -11,7 +11,7 @@ test("yieldNow pauses scheduled execution", async () => {
     return 42;
   });
 
-  const pending = runWithScheduler(work, []);
+  const pending = asyncScheduler(work, []);
   assert.equal(finished, false);
   assert.equal(await pending, 42);
   assert.equal(finished, true);

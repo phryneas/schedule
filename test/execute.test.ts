@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { makeSchedulable, runWithScheduler, execute } from "../src/index.ts";
+import { makeSchedulable, asyncScheduler, execute } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
 test("execute composes schedulable functions", async () => {
@@ -16,5 +16,5 @@ test("execute composes schedulable functions", async () => {
   });
 
   assert.equal(sumBatches([[1, 2], [3]]), 6);
-  assert.equal(await runWithScheduler(sumBatches, [[[1, 2], [3]]]), 6);
+  assert.equal(await asyncScheduler(sumBatches, [[[1, 2], [3]]]), 6);
 });

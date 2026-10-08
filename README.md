@@ -12,7 +12,7 @@ Use a regular generator with `makeSchedulable`. Check the scheduling signal
 inside expensive loops and yield when its time budget is used up.
 
 ```ts
-import { makeSchedulable, runWithScheduler } from "./src/index.ts";
+import { makeSchedulable, asyncScheduler } from "./src/index.ts";
 import * as scheduler from "./src/index.ts";
 import type { SchedulableIterable } from "./src/types.ts";
 
@@ -31,11 +31,11 @@ const sum = makeSchedulable(function* sum(
 });
 
 sum([1, 2, 3]);                          // 6, synchronously
-await runWithScheduler(sum, [[1, 2, 3]]); // 6, cooperatively
+await asyncScheduler(sum, [[1, 2, 3]]); // 6, cooperatively
 ```
 
 Direct calls run to completion without yielding to the event loop.
-`runWithScheduler(fn, args, signal?)` returns a promise and uses a roughly 16 ms
+`asyncScheduler(fn, args, signal?)` returns a promise and uses a roughly 16 ms
 budget between yields. Work stays on the same thread: place checkpoints often
 enough that no individual chunk blocks the UI for too long.
 
@@ -74,7 +74,7 @@ const sumViaDependency = makeSchedulable(function* sumViaDependency(
 ): SchedulableIterable<number> {
   return yield* scheduler.syncAware({
     sync: sum,
-    async: (input: number[]) => runWithScheduler(sum, [input]),
+    async: (input: number[]) => asyncScheduler(sum, [input]),
     args: [values],
   });
 });
@@ -82,7 +82,7 @@ const sumViaDependency = makeSchedulable(function* sumViaDependency(
 
 The sync runner chooses `sync`; the scheduled runner awaits `async`. This is
 also useful for separate memoized sync and async implementations.
-Cancellation propagation through nested `runWithScheduler` calls is currently
+Cancellation propagation through nested `asyncScheduler` calls is currently
 incomplete; see [TODOs](TODOs.md).
 
 ## Cancel stale work
@@ -92,7 +92,7 @@ needed, for example when editor input changes or a component unmounts.
 
 ```ts
 const controller = new AbortController();
-const pending = runWithScheduler(sum, [[1, 2, 3]], controller.signal);
+const pending = asyncScheduler(sum, [[1, 2, 3]], controller.signal);
 
 // From an input-change handler or cleanup:
 controller.abort();

@@ -7,14 +7,14 @@ import type {
   ScheduleSignal,
 } from "./types.ts";
 
-export function runWithScheduler<Ret, Args extends Array<unknown>>(
+export function asyncScheduler<Ret, Args extends Array<unknown>>(
   fn: ((..._: Args) => Ret) | SchedulableFunction<Ret, Args>,
   args: Args,
   abortSignal?: AbortSignal | ScheduleSignal,
 ): Promise<Ret> {
   if (!isSchedulableFunction(fn)) {
     // eslint-disable-next-line no-undef, no-console
-    console?.warn("Running a non-schedulable function with runWithScheduler!");
+    console?.warn("Running a non-schedulable function with asyncScheduler!");
     return Promise.resolve().then(() => fn(...args));
   }
   return chunkedScheduler(

@@ -4,4 +4,4 @@ export type { Command } from "./commands.ts";
 export type { SchedulableFunction, SchedulableIterable } from "./types.ts";
 export { syncScheduler } from "./syncScheduler.ts";
 export { getSignal } from "./getSignal.ts";
-export { runWithScheduler } from "./runWithScheduler.ts";
+export { asyncScheduler } from "./asyncScheduler.ts";
