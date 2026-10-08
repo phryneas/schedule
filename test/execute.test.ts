@@ -3,6 +3,27 @@ import test from "node:test";
 import { makeSchedulable, async, execute, yieldNow } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
+test("execute supports dynamically narrowed ordinary and schedulable methods", async () => {
+  const serialize = makeSchedulable(function* (value: Record<string, unknown>) {
+    if (typeof value.toJSON === "function") {
+      return yield* execute(value.toJSON).bind(value)(3);
+    }
+    return value;
+  });
+  const ordinary = { total: 10, toJSON(amount: number) { return this.total + amount; } };
+  const scheduled = {
+    total: 20,
+    toJSON: makeSchedulable(function* (this: { total: number }, amount: number) {
+      yield* yieldNow();
+      return this.total + amount;
+    }),
+  };
+  for (const [value, expected] of [[ordinary, 13], [scheduled, 23]] as const) {
+    assert.equal(serialize(value), expected);
+    assert.equal(await async(serialize)(value), expected);
+  }
+});
+
 test("execute composes schedulable functions", async () => {
   const sum = makeSchedulable(function* (values: number[]): SchedulableIterable<number> {
     return values.reduce((total, value) => total + value, 0);

@@ -2,6 +2,7 @@ import { expectTypeOf } from "expect-type";
 import { async, execute, getSignal, makeSchedulable, sync } from "../src/index.ts";
 import type { ScheduleSignal } from "../src/types.ts";
 import type { SchedulableIterable } from "../src/index.ts";
+import type { schedulableImplementationSignal as key } from "../src/index.ts";
 
 const sum = makeSchedulable(function* (
   values: number[],
@@ -28,11 +29,14 @@ sync(sum)("not an array");
 // @ts-expect-error Preserve the argument type of the original function.
 async(sum)("not an array");
 
-const identity = makeSchedulable<
-  <T>(value: T) => SchedulableIterable<T>,
-  <T>(value: T) => T,
-  <T>(value: T) => Promise<T>
->(function* <T>(value: T): SchedulableIterable<T> {
+const identity = makeSchedulable<{
+  <T>(value: T): T;
+  [key]: {
+    <T>(value: T): SchedulableIterable<T>;
+    syncSignature?<T>(value: T): T;
+    asyncSignature?<T>(value: T): Promise<T>;
+  };
+}>(function* <T>(value: T): SchedulableIterable<T> {
   return value;
 });
 

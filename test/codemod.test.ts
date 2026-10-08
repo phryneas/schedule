@@ -1,0 +1,170 @@
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, readdir, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import test from "node:test";
+import { transformSync } from "@babel/core";
+import plugin from "../src/codemod/transform.ts";
+import { async as scheduled, commands, makeSchedulable } from "../src/index.ts";
+import * as graphql from "graphql";
+
+const runtimeModule = new URL("../src/index.ts", import.meta.url).href;
+
+function transform(source: string, filename = "fixture.mjs") {
+  return transformSync(source, {
+    filename, configFile: false, babelrc: false,
+    plugins: [[plugin, { runtimeModule }]],
+  })!.code!;
+}
+
+async function load(source: string) {
+  return import(`data:text/javascript;base64,${Buffer.from(transform(source)).toString("base64")}`);
+}
+
+test("plugin preserves function hoisting and schedules local calls", async () => {
+  const output = transform(`
+    export const initial = twice(3);
+    export function twice(value) { return add(value, value); }
+    function add(a, b) { return a + b; }
+  `);
+  assert.match(output, /yield\* .*\.execute\(add/);
+  const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
+  assert.equal(module.initial, 6);
+  assert.equal(module.twice(4), 8);
+  assert.equal(await scheduled(module.twice)(4), 8);
+});
+
+test("plugin preserves method receivers and evaluates receiver expressions once", async () => {
+  const module = await load(`
+    export class Counter {
+      constructor() { this.value = 2; }
+      get current() { return this.value; }
+      add(n) { this.value += n; return this.value; }
+      run(n) { return this.add(n); }
+    }
+    export function run(counter) {
+      let calls = 0;
+      function receiver() { calls++; return counter; }
+      return [receiver().run(3), calls];
+    }
+  `);
+  assert.deepEqual(module.run(new module.Counter()), [5, 1]);
+  assert.deepEqual(await scheduled(module.run)(new module.Counter()), [5, 1]);
+  assert.equal(new module.Counter().current, 2);
+  assert.equal(Object.hasOwn(new module.Counter(), "run"), false);
+});
+
+test("receiver temporaries avoid existing names and nested-scope references", async () => {
+  const module = await load(`
+    const _receiver = 11;
+    export function run(getObject) {
+      const _receiver2 = 22;
+      function nested() { return _receiver + _receiver2; }
+      return [getObject().read(), nested(), _receiver, _receiver2];
+    }
+  `);
+  const getObject = () => ({ value: 7, read() { return this.value; } });
+  assert.deepEqual(module.run(getObject), [7, 33, 11, 22]);
+  assert.deepEqual(await scheduled(module.run)(getObject), [7, 33, 11, 22]);
+});
+
+test("receiver assignments stay conditional and preserve nested argument evaluation order", async () => {
+  const source = `
+    export function run(enabled, choose, mark) {
+      return enabled && (choose("outer").add(choose("inner").add(mark("arg", 3))) + mark("last", 5));
+    }
+    export function conditional(enabled, choose, mark) {
+      return enabled ? choose("yes").add(mark("arg", 3)) : mark("no", 0);
+    }
+  `;
+  const original = await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
+  const transformed = await load(source);
+  async function observe(fn, enabled) {
+    const events: string[] = [];
+    const choose = (name: string) => {
+      events.push(`choose ${name}`);
+      return { name, add(value: number) { events.push(`add ${this.name}`); return value + 1; } };
+    };
+    const mark = (name: string, value: number) => { events.push(name); return value; };
+    return { value: await fn(enabled, choose, mark), events };
+  }
+  for (const name of ["run", "conditional"]) {
+    for (const enabled of [false, true]) {
+      const expected = await observe(original[name], enabled);
+      assert.deepEqual(await observe(transformed[name], enabled), expected);
+      assert.deepEqual(await observe(scheduled(transformed[name]), enabled), expected);
+    }
+  }
+});
+
+test("receiver temporaries are isolated across recursive and concurrent executions", async () => {
+  const module = await load(`
+    export function recurse(receiver, depth) {
+      return receiver(depth).add(depth ? recurse(receiver, depth - 1) : 0);
+    }
+  `);
+  const add = makeSchedulable(function* (this: { value: number }, amount: number) {
+    yield* commands.yieldNow();
+    return this.value + amount;
+  });
+  const receiver = (value: number) => ({ value, add });
+  assert.equal(module.recurse(receiver, 4), 10);
+  assert.deepEqual(await Promise.all([
+    scheduled(module.recurse)(receiver, 4),
+    scheduled(module.recurse)(receiver, 7),
+  ]), [10, 28]);
+});
+
+test("plugin leaves existing generator and async functions unchanged", async () => {
+  const module = await load(`
+    export function* values() { yield 1; return 2; }
+    export async function value() { return 3; }
+  `);
+  assert.deepEqual(module.values().next(), { value: 1, done: false });
+  assert.equal(await module.value(), 3);
+});
+
+test("GraphQL.js 16.14.2 transforms and runs through its public API", async (t) => {
+  assert.equal(graphql.version, "16.14.2");
+  const root = dirname(fileURLToPath(import.meta.resolve("graphql/package.json")));
+  const output = await mkdtemp(join(tmpdir(), "scheduled-graphql-"));
+  t.after(() => rm(output, { recursive: true, force: true }));
+  async function compile(relative = "") {
+    for (const entry of await readdir(join(root, relative), { withFileTypes: true })) {
+      const path = join(relative, entry.name);
+      if (entry.isDirectory()) await compile(path);
+      else if (path.endsWith(".mjs")) {
+        const code = transform(await readFile(join(root, path), "utf8"), path);
+        await mkdir(dirname(join(output, path)), { recursive: true });
+        await writeFile(join(output, path), code);
+      }
+    }
+  }
+  await compile();
+  const transformed = await import(pathToFileURL(join(output, "index.mjs")).href);
+  const query = "query Test($id: ID!) { user(id: $id) { id name } }";
+  const original = graphql.parse(query, { noLocation: true });
+  assert.deepEqual(transformed.parse(query, { noLocation: true }), original);
+  assert.deepEqual(await scheduled(transformed.parse)(query, { noLocation: true }), original);
+  assert.equal(transformed.print(original), graphql.print(original));
+  const names: string[] = [];
+  await scheduled(transformed.visit)(original, { Name(node: any) { names.push(node.value); } });
+  assert.ok(names.includes("user"));
+  const schema = transformed.buildSchema("type Query { hello: String }");
+  assert.deepEqual(transformed.validate(schema, transformed.parse("{ hello }")), []);
+  assert.deepEqual(await scheduled(transformed.validate)(schema, transformed.parse("{ hello }")), []);
+  assert.deepEqual(await transformed.graphql({ schema, source: "{ hello }", rootValue: { hello: "world" } }), {
+    data: Object.assign(Object.create(null), { hello: "world" }),
+  });
+  await assert.rejects(scheduled(transformed.parse)("{ invalid"), /Syntax Error/);
+
+  // A supplied schedulable visitor must be executed through the same runner.
+  let visited = false;
+  const visitor = makeSchedulable(function* () {
+    yield* commands.yieldNow();
+    visited = true;
+  });
+  await scheduled(transformed.visit)(original, { Document: visitor });
+  assert.equal(visited, true);
+});

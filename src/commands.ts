@@ -37,7 +37,11 @@ export function execute<Ret, Args extends Array<unknown>, ThisArg>(
   startImmediately?: boolean,
 ): (this: ThisArg, ...args: Args) => SchedulableIterable<Ret>;
 export function execute(
-  fn: (...args: any[]) => unknown,
+  fn: Function,
+  startImmediately?: boolean,
+): (this: unknown, ...args: any[]) => SchedulableIterable<any>;
+export function execute(
+  fn: Function,
   startImmediately = false,
 ) {
   return function* executeCommand(this: unknown, ...args: unknown[]): SchedulableIterable<unknown> {
