@@ -26,13 +26,16 @@ export function makeSchedulable<
  */
 /* Overload for manual specification of the different shapes, in case a method uses generics and/or overloads */
 export function makeSchedulable<
-  GeneratorSignature extends (...args: any[]) => SchedulableIterable<unknown>,
-  SyncSignature extends (...args: any[]) => any,
-  AsyncSignature extends (...args: any[]) => Promise<any>,
+  FullSignature extends SchedulableMarker<
+    (...args: any[]) => SchedulableIterable<unknown>,
+    (...args: any[]) => unknown,
+    (...args: any[]) => Promise<unknown>
+  >,
 >(
-  schedulableImplementation: GeneratorSignature,
-): SyncSignature &
-  SchedulableMarker<GeneratorSignature, SyncSignature, AsyncSignature>;
+  schedulableImplementation: FullSignature extends FullSignature[typeof schedulableImplementationSignal]["syncSignature"]
+    ? FullSignature[typeof schedulableImplementationSignal]
+    : never,
+): FullSignature;
 
 export function makeSchedulable<
   Ret,
