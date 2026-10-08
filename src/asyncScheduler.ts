@@ -1,5 +1,4 @@
-import type { Command } from "./commands.ts";
-import { context, schedulableImplementationSignal } from "./internal.ts";
+import { schedulableImplementationSignal } from "./internal.ts";
 import { isSchedulableFunction } from "./isSchedulableFunction.ts";
 import type {
   SchedulableIterable,
@@ -14,11 +13,6 @@ export function async<
   signal?: AbortSignal | ScheduleSignal,
 ): NonNullable<Fn[typeof schedulableImplementationSignal]["asyncSignature"]> {
   return function (this: any) {
-    if (context.signal !== undefined || context.inSyncAware) {
-      throw new Error(
-        "Cannot start a scheduler inside a scheduler. Use execute() to compose schedulable functions.",
-      );
-    }
     return executeIterableAsync(
       fn[schedulableImplementationSignal].apply(this, arguments as any),
       signal,
@@ -74,18 +68,17 @@ function executeIterableAsync<T>(
     const iterator = iterable[Symbol.iterator]();
     let nextArg: unknown;
     do {
-      let result: IteratorResult<Command, T>;
-      try {
-        context.signal = scheduleSignal;
-        result = iterator.next(nextArg);
-        nextArg = undefined;
-      } finally {
-        context.signal = undefined;
-      }
+      const result = iterator.next(nextArg);
+      nextArg = undefined;
       if (result.done) {
         return result.value as Awaited<T>;
       }
       switch (result.value.kind) {
+        case "getSignal": {
+          scheduleSignal.throwIfAborted();
+          nextArg = scheduleSignal;
+          continue;
+        }
         case "yield": {
           schedule(continueLoop);
           yield;
@@ -107,12 +100,7 @@ function executeIterableAsync<T>(
             // we are just back from an async call, so we don't need to yield again for a while
             scheduleSignal.bump();
           } else {
-            try {
-              context.signal = scheduleSignal;
-              nextArg = fn.apply(thisArg, args);
-            } finally {
-              context.signal = undefined;
-            }
+            nextArg = fn.apply(thisArg, args);
           }
           continue;
         }
@@ -123,15 +111,7 @@ function executeIterableAsync<T>(
             yield;
             scheduleSignal.bump();
           }
-          let pending: unknown;
-          try {
-            context.inSyncAware = true;
-            pending = async.apply(thisArg, args);
-          } finally {
-            // Clear before awaiting: other runs may start while this one waits.
-            context.inSyncAware = false;
-          }
-          nextArg = await pending;
+          nextArg = await async.apply(thisArg, args);
           // we are just back from an async call, so we don't need to yield again for a while
           scheduleSignal.bump();
           continue;

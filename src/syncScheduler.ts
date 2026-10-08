@@ -1,10 +1,9 @@
 import type {
-  SchedulableFunction,
   SchedulableIterable,
   SchedulableMarker,
   ScheduleSignal,
 } from "./types.ts";
-import { context, schedulableImplementationSignal } from "./internal.ts";
+import { schedulableImplementationSignal } from "./internal.ts";
 import { isSchedulableFunction } from "./isSchedulableFunction.ts";
 
 export const syncSignal: ScheduleSignal = {
@@ -31,20 +30,6 @@ export function sync<
 }
 
 export function executeIterableSync<T>(iterable: SchedulableIterable<T>): T {
-  if (context.signal !== undefined || context.inSyncAware) {
-    throw new Error(
-      "Cannot start a scheduler inside a scheduler. Use execute() to compose schedulable functions.",
-    );
-  }
-  try {
-    context.signal = syncSignal;
-    return syncSchedulerInternal(iterable);
-  } finally {
-    context.signal = undefined;
-  }
-}
-
-function syncSchedulerInternal<T>(iterable: SchedulableIterable<T>): T {
   const iterator = iterable[Symbol.iterator]();
   let nextArg: unknown;
   do {
@@ -54,13 +39,17 @@ function syncSchedulerInternal<T>(iterable: SchedulableIterable<T>): T {
       return result.value;
     }
     switch (result.value.kind) {
+      case "getSignal": {
+        nextArg = syncSignal;
+        break;
+      }
       case "yield": {
         break;
       }
       case "execute": {
         const { fn, args, this: thisArg } = result.value;
         nextArg = isSchedulableFunction(fn)
-          ? syncSchedulerInternal(fn[schedulableImplementationSignal](...args))
+          ? executeIterableSync(fn[schedulableImplementationSignal](...args))
           : fn.apply(thisArg, args);
         break;
       }

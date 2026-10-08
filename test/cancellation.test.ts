@@ -5,8 +5,8 @@ import type { SchedulableIterable } from "../src/index.ts";
 
 test("AbortController cancels scheduled work", async () => {
   const work = makeSchedulable(function* (): SchedulableIterable<number> {
-    const signal = getSignal();
-    yield yieldNow;
+    const signal = yield* getSignal();
+    yield* yieldNow();
     signal.throwIfAborted();
     return 42;
   });
@@ -19,8 +19,8 @@ test("AbortController cancels scheduled work", async () => {
 
 test("execute propagates cancellation without affecting concurrent runs", async () => {
   const work = makeSchedulable(function* (): SchedulableIterable<number> {
-    const signal = getSignal();
-    yield yieldNow;
+    const signal = yield* getSignal();
+    yield* yieldNow();
     signal.throwIfAborted();
     return 42;
   });
@@ -36,16 +36,13 @@ test("execute propagates cancellation without affecting concurrent runs", async 
   assert.equal(await independent, 42);
 });
 
-test("ordinary execute callbacks receive context and clear it when throwing", async () => {
+test("ordinary execute callback errors reject the scheduled run", async () => {
   const reason = new Error("callback failed");
   const parent = makeSchedulable(function* (): SchedulableIterable<void> {
-    const signal = getSignal();
     yield* execute(() => {
-      assert.equal(getSignal(), signal);
       throw reason;
     }, undefined, []);
   });
 
   await assert.rejects(async(parent)(), (error) => error === reason);
-  assert.throws(() => getSignal(), /synchronous scheduler execution/);
 });

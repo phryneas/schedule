@@ -1,6 +1,7 @@
-import type { SchedulableIterable } from "./types.ts";
+import type { SchedulableIterable, ScheduleSignal } from "./types.ts";
 
 export type Command =
+  | { kind: "getSignal" }
   | { kind: "yield" }
   | {
       kind: "execute";
@@ -18,7 +19,13 @@ export type Command =
       startImmediately?: boolean;
     };
 
-export const yieldNow: Command = { kind: "yield" };
+export function* yieldNow(): SchedulableIterable<void> {
+  yield { kind: "yield" };
+}
+
+export function* getSignal(): SchedulableIterable<ScheduleSignal> {
+  return (yield { kind: "getSignal" }) as ScheduleSignal;
+}
 
 export const execute = <Ret, Args extends Array<unknown>, ThisArg>(
   fn: (this: ThisArg, ...args: Args) => Ret,

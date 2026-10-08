@@ -6,7 +6,7 @@ import type { SchedulableIterable } from "../src/index.ts";
 test("yieldNow pauses scheduled execution", async () => {
   let finished = false;
   const work = makeSchedulable(function* (): SchedulableIterable<number> {
-    yield yieldNow;
+    yield* yieldNow();
     finished = true;
     return 42;
   });

@@ -1,5 +1,6 @@
 import { expectTypeOf } from "expect-type";
-import { async, execute, makeSchedulable, sync } from "../src/index.ts";
+import { async, execute, getSignal, makeSchedulable, sync } from "../src/index.ts";
+import type { ScheduleSignal } from "../src/types.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
 const sum = makeSchedulable(function* (
@@ -15,6 +16,8 @@ expectTypeOf(sync(sum)).parameters.toEqualTypeOf<[number[]]>();
 expectTypeOf(async(sum)).parameters.toEqualTypeOf<[number[]]>();
 
 makeSchedulable(function* (): SchedulableIterable<number> {
+  const signal = yield* getSignal();
+  expectTypeOf(signal).toEqualTypeOf<ScheduleSignal>();
   const result = yield* execute(sum, undefined, [[1, 2, 3]]);
   expectTypeOf(result).toEqualTypeOf<number>();
   return result;

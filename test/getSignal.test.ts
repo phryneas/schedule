@@ -3,33 +3,29 @@ import test from "node:test";
 import { async, getSignal, makeSchedulable, syncAware } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
-test("getSignal throws outside scheduler execution", () => {
-  assert.throws(() => getSignal(), /synchronous scheduler execution/);
+test("getSignal creates a command", () => {
+  assert.deepEqual(getSignal().next(), { done: false, value: { kind: "getSignal" } });
 });
 
 test("getSignal works inside sync and async scheduler execution", async () => {
   const work = makeSchedulable(function* (): SchedulableIterable<boolean> {
-    return getSignal().aborted;
+    return (yield* getSignal()).aborted;
   });
 
   assert.equal(work(), false);
-  assert.throws(() => getSignal(), /synchronous scheduler execution/);
   assert.equal(await async(work)(), false);
-  assert.throws(() => getSignal(), /synchronous scheduler execution/);
 });
 
 test("async syncAware callbacks use a signal captured by the generator", async () => {
   const controller = new AbortController();
   const work = makeSchedulable(function* (): SchedulableIterable<void> {
-    const signal = getSignal();
+    const signal = yield* getSignal();
     yield* syncAware({
       sync: () => {
-        assert.equal(getSignal(), signal);
+        assert.equal(signal.aborted, false);
       },
       async: async () => {
-        assert.throws(() => getSignal(), /synchronous scheduler execution/);
         await Promise.resolve();
-        assert.throws(() => getSignal(), /synchronous scheduler execution/);
         controller.abort();
         assert.equal(signal.aborted, true);
         assert.throws(() => signal.throwIfAborted(), { name: "AbortError" });
@@ -40,6 +36,14 @@ test("async syncAware callbacks use a signal captured by the generator", async (
 
   work();
   const pending = async(work, controller.signal)();
-  assert.throws(() => getSignal(), /synchronous scheduler execution/);
   await pending;
+});
+
+test("requesting a signal rejects an already aborted run", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const work = makeSchedulable(function* () {
+    return yield* getSignal();
+  });
+  await assert.rejects(async(work, controller.signal)(), { name: "AbortError" });
 });
