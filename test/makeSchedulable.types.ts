@@ -18,7 +18,7 @@ expectTypeOf(async(sum)).parameters.toEqualTypeOf<[number[]]>();
 makeSchedulable(function* (): SchedulableIterable<number> {
   const signal = yield* getSignal();
   expectTypeOf(signal).toEqualTypeOf<ScheduleSignal>();
-  const result = yield* execute(sum, undefined, [[1, 2, 3]]);
+  const result = yield* execute(sum)([1, 2, 3]);
   expectTypeOf(result).toEqualTypeOf<number>();
   return result;
 });
@@ -40,3 +40,5 @@ expectTypeOf(sync(identity)(42)).toEqualTypeOf<number>();
 expectTypeOf(sync(identity)(42 as const)).toEqualTypeOf<42>();
 
 expectTypeOf(async(identity)("hello")).toEqualTypeOf<Promise<string>>();
+
+expectTypeOf(execute(identity)(42)).toEqualTypeOf<SchedulableIterable<number>>();

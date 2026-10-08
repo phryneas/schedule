@@ -25,7 +25,7 @@ test("execute propagates cancellation without affecting concurrent runs", async 
     return 42;
   });
   const parent = makeSchedulable(function* (): SchedulableIterable<number> {
-    return yield* execute(work, undefined, []);
+    return yield* execute(work)();
   });
   const controller = new AbortController();
   const pending = async(parent, controller.signal)();
@@ -41,7 +41,7 @@ test("ordinary execute callback errors reject the scheduled run", async () => {
   const parent = makeSchedulable(function* (): SchedulableIterable<void> {
     yield* execute(() => {
       throw reason;
-    }, undefined, []);
+    })();
   });
 
   await assert.rejects(async(parent)(), (error) => error === reason);

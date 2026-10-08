@@ -67,10 +67,9 @@ if (signal.shouldYield) {
 
 Put this check inside long loops, as in `sum` above, to keep the UI responsive.
 
-### `commands.execute(fn, thisArg, args)`
+### `commands.execute(fn)(...args)`
 
 Call another function and get its result, using the current execution mode.
-Pass `undefined` for `thisArg` when the function does not need a receiver.
 Schedulable functions inherit the current scheduler they are running in.
 
 ```ts
@@ -79,13 +78,14 @@ const sumBatches = makeSchedulable(function* sumBatches(
 ): SchedulableIterable<number> {
   let total = 0;
   for (const batch of batches) {
-    total += yield* commands.execute(sum, undefined, [batch]);
+    total += yield* commands.execute(sum)(batch);
   }
   return total;
 });
 ```
 
 Ordinary functions and callbacks also work, but run uninterrupted once called.
+For methods, bind the receiver: `yield* commands.execute(object.method).bind(object)(arg)`.
 
 ### `commands.syncAware({ sync, async, args })`
 

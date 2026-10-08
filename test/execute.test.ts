@@ -10,7 +10,7 @@ test("execute composes schedulable functions", async () => {
   const sumBatches = makeSchedulable(function* (batches: number[][]): SchedulableIterable<number> {
     let total = 0;
     for (const batch of batches) {
-      total += yield* execute(sum, undefined, [batch]);
+      total += yield* execute(sum)(batch);
     }
     return total;
   });
@@ -27,7 +27,7 @@ test("execute forwards this and arguments to an ordinary function", async () => 
     return this.total;
   }
   const work = makeSchedulable(function* (): SchedulableIterable<number> {
-    return yield* execute(add, receiver, [3]);
+    return yield* execute(add).bind(receiver)(3);
   });
 
   assert.equal(work(), 13);
@@ -50,7 +50,7 @@ test("execute forwards this and arguments to a schedulable function", async () =
     return this.total;
   });
   const work = makeSchedulable(function* (): SchedulableIterable<number> {
-    return yield* execute(add, receiver, [3]);
+    return yield* execute(add).bind(receiver)(3);
   });
 
   assert.equal(work(), 13);
