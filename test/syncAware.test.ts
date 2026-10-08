@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeSchedulable, asyncScheduler, syncAware, getSignal, yieldNow } from "../src/index.ts";
+import { makeSchedulable, async, syncAware, getSignal, yieldNow } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
 test("syncAware reads a file and sums its lines in both modes", async () => {
@@ -32,5 +32,5 @@ test("syncAware reads a file and sums its lines in both modes", async () => {
 
   const directory = fileURLToPath(new URL("./fixtures/", import.meta.url));
   assert.equal(sumFile(directory, "numbers.txt"), 6);
-  assert.equal(await asyncScheduler(sumFile, [directory, "numbers.txt"]), 6);
+  assert.equal(await async(sumFile)(directory, "numbers.txt"), 6);
 });

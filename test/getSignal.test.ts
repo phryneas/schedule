@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { asyncScheduler, getSignal, makeSchedulable, syncAware } from "../src/index.ts";
+import { async, getSignal, makeSchedulable, syncAware } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
 test("getSignal throws outside scheduler execution", () => {
@@ -14,7 +14,7 @@ test("getSignal works inside sync and async scheduler execution", async () => {
 
   assert.equal(work(), false);
   assert.throws(() => getSignal(), /synchronous scheduler execution/);
-  assert.equal(await asyncScheduler(work, []), false);
+  assert.equal(await async(work)(), false);
   assert.throws(() => getSignal(), /synchronous scheduler execution/);
 });
 
@@ -39,7 +39,7 @@ test("async syncAware callbacks use a signal captured by the generator", async (
   });
 
   work();
-  const pending = asyncScheduler(work, [], controller.signal);
+  const pending = async(work, controller.signal)();
   assert.throws(() => getSignal(), /synchronous scheduler execution/);
   await pending;
 });

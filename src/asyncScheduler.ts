@@ -2,31 +2,31 @@ import type { Command } from "./commands.ts";
 import { context, schedulableImplementationSignal } from "./internal.ts";
 import { isSchedulableFunction } from "./isSchedulableFunction.ts";
 import type {
-  SchedulableFunction,
   SchedulableIterable,
+  SchedulableMarker,
   ScheduleSignal,
 } from "./types.ts";
 
-export function asyncScheduler<Ret, Args extends Array<unknown>>(
-  fn: ((..._: Args) => Ret) | SchedulableFunction<Ret, Args>,
-  args: Args,
-  abortSignal?: AbortSignal | ScheduleSignal,
-): Promise<Ret> {
-  if (context.signal !== undefined || context.inSyncAware) {
-    throw new Error("Cannot start a scheduler inside a scheduler. Use execute() to compose schedulable functions.");
-  }
-  if (!isSchedulableFunction(fn)) {
-    // eslint-disable-next-line no-undef, no-console
-    console?.warn("Running a non-schedulable function with asyncScheduler!");
-    return Promise.resolve().then(() => fn(...args));
-  }
-  return chunkedScheduler(
-    fn[schedulableImplementationSignal](...args),
-    abortSignal,
-  ) as Promise<Ret>;
+export function async<
+  Fn extends SchedulableMarker<(...args: any[]) => any, any, any>,
+>(
+  fn: Fn,
+  signal?: AbortSignal | ScheduleSignal,
+): NonNullable<Fn[typeof schedulableImplementationSignal]["asyncSignature"]> {
+  return function (this: any) {
+    if (context.signal !== undefined || context.inSyncAware) {
+      throw new Error(
+        "Cannot start a scheduler inside a scheduler. Use execute() to compose schedulable functions.",
+      );
+    }
+    return executeIterableAsync(
+      fn[schedulableImplementationSignal].apply(this, arguments as any),
+      signal,
+    );
+  };
 }
 
-function chunkedScheduler<T>(
+function executeIterableAsync<T>(
   iterable: SchedulableIterable<T>,
   abortSignal?: AbortSignal | ScheduleSignal,
 ): Promise<T> {
@@ -100,7 +100,7 @@ function chunkedScheduler<T>(
             scheduleSignal.bump();
           }
           if (isSchedulableFunction(fn)) {
-            nextArg = await chunkedScheduler(
+            nextArg = await executeIterableAsync(
               fn[schedulableImplementationSignal](...args),
               scheduleSignal,
             );

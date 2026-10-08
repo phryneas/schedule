@@ -12,7 +12,7 @@ Use a regular generator with `makeSchedulable`. Check the scheduling signal
 inside expensive loops and yield when its time budget is used up.
 
 ```ts
-import { makeSchedulable, asyncScheduler } from "./src/index.ts";
+import { makeSchedulable, sync, async } from "./src/index.ts";
 import * as scheduler from "./src/index.ts";
 import type { SchedulableIterable } from "./src/types.ts";
 
@@ -30,14 +30,16 @@ const sum = makeSchedulable(function* sum(
   return total;
 });
 
-sum([1, 2, 3]);                          // 6, synchronously
-await asyncScheduler(sum, [[1, 2, 3]]); // 6, cooperatively
+sum([1, 2, 3]);              // 6, synchronously
+sync(sum)([1, 2, 3]);        // 6, synchronously
+await async(sum)([1, 2, 3]); // 6, cooperatively
 ```
 
 Direct calls run to completion without yielding to the event loop.
-`asyncScheduler(fn, args, signal?)` returns a promise and uses a roughly 16 ms
-budget between yields. Work stays on the same thread: place checkpoints often
-enough that no individual chunk blocks the UI for too long.
+Use `async(fn, signal?)(...args)` to run a function cooperatively and await its
+result, or `sync(fn)(...args)` to run it synchronously.
+Scheduled work uses a roughly 16 ms budget between yields and stays on the same
+thread: place checkpoints often enough to keep the UI responsive.
 
 ## Compose functions and callbacks
 
@@ -98,7 +100,7 @@ const sumFile = makeSchedulable(function* sumFile(
 ```
 
 A direct call to `sumFile` reads the file synchronously. Running it with
-`asyncScheduler` uses the non-blocking `readFile` and lets the summing loop yield
+`async(sumFile)(directory, filename)` uses the non-blocking `readFile` and lets the summing loop yield
 as needed. Call `getSignal()` in your generator, as shown above.
 
 ## Cancel stale work
@@ -108,7 +110,7 @@ needed, for example when editor input changes or a component unmounts.
 
 ```ts
 const controller = new AbortController();
-const pending = asyncScheduler(sum, [[1, 2, 3]], controller.signal);
+const pending = async(sum, controller.signal)([1, 2, 3]);
 
 // From an input-change handler or cleanup:
 controller.abort();

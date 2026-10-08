@@ -1,9 +1,5 @@
 # TODOs
 
-- [ ] Clarify handling of unadapted functions in `asyncScheduler`. Currently
-  it logs a warning and calls them in a promise microtask without splitting
-  their work into chunks. Cooperative execution requires an adapted implementation.
-
 - [ ] Review support for promise-returning functions in `scheduler.execute`.
   Currently it does not await ordinary promise-returning callees; `syncAware`
   is the available workaround when an awaited async implementation is needed.

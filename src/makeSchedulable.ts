@@ -1,11 +1,30 @@
 import { schedulableImplementationSignal } from "./internal.ts";
-import { syncScheduler } from "./syncScheduler.ts";
+import { executeIterableSync } from "./syncScheduler.ts";
 import type {
   SchedulableFunction,
   SchedulableIterable,
   SchedulableMarker,
 } from "./types.ts";
 
+/**
+ * TODO docs
+ */
+/* Overload for inference */
+export function makeSchedulable<
+  Ret,
+  Args extends Array<unknown> = [],
+  ThisArg = unknown,
+>(
+  schedulableImplementation: (
+    this: ThisArg,
+    ...args: Args
+  ) => SchedulableIterable<Ret>,
+): SchedulableFunction<Ret, Args, ThisArg>;
+
+/**
+ * TODO docs
+ */
+/* Overload for manual specification of the different shapes, in case a method uses generics and/or overloads */
 export function makeSchedulable<
   GeneratorSignature extends (...args: any[]) => SchedulableIterable<unknown>,
   SyncSignature extends (...args: any[]) => any,
@@ -24,22 +43,11 @@ export function makeSchedulable<
     this: ThisArg,
     ...args: Args
   ) => SchedulableIterable<Ret>,
-): SchedulableFunction<Ret, Args, ThisArg>;
-
-export function makeSchedulable<
-  Ret,
-  Args extends Array<unknown> = [],
-  ThisArg = unknown,
->(
-  schedulableImplementation: (
-    this: ThisArg,
-    ...args: Args
-  ) => SchedulableIterable<Ret>,
 ): SchedulableFunction<Ret, Args, ThisArg> {
   const name = schedulableImplementation.name || "schedulableFunction";
   const schedulable = {
     [name](this: ThisArg, ...args: Args) {
-      return syncScheduler(schedulableImplementation.apply(this, args));
+      return executeIterableSync(schedulableImplementation.apply(this, args));
     },
   };
 

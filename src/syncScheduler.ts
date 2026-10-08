@@ -1,4 +1,9 @@
-import type { SchedulableIterable, ScheduleSignal } from "./types.ts";
+import type {
+  SchedulableFunction,
+  SchedulableIterable,
+  SchedulableMarker,
+  ScheduleSignal,
+} from "./types.ts";
 import { context, schedulableImplementationSignal } from "./internal.ts";
 import { isSchedulableFunction } from "./isSchedulableFunction.ts";
 
@@ -13,7 +18,19 @@ export const syncSignal: ScheduleSignal = {
   },
 };
 
-export function syncScheduler<T>(iterable: SchedulableIterable<T>): T {
+export function sync<
+  Fn extends SchedulableMarker<(...args: any[]) => any, any, any>,
+>(
+  fn: Fn,
+): NonNullable<Fn[typeof schedulableImplementationSignal]["syncSignature"]> {
+  return function (this: any) {
+    return executeIterableSync(
+      fn[schedulableImplementationSignal].apply(this, arguments as any),
+    );
+  };
+}
+
+export function executeIterableSync<T>(iterable: SchedulableIterable<T>): T {
   if (context.signal !== undefined || context.inSyncAware) {
     throw new Error(
       "Cannot start a scheduler inside a scheduler. Use execute() to compose schedulable functions.",

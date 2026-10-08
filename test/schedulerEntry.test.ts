@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { asyncScheduler, execute, getSignal, makeSchedulable, syncAware, yieldNow } from "../src/index.ts";
+import {
+  async,
+  execute,
+  getSignal,
+  makeSchedulable,
+  syncAware,
+  yieldNow,
+} from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
 test("both schedulers reject nested entry in generators and callbacks", async () => {
@@ -9,7 +16,10 @@ test("both schedulers reject nested entry in generators and callbacks", async ()
   });
   function check() {
     assert.throws(() => child(), /Cannot start a scheduler inside a scheduler/);
-    assert.throws(() => asyncScheduler(child, []), /Cannot start a scheduler inside a scheduler/);
+    assert.throws(
+      () => async(child)(),
+      /Cannot start a scheduler inside a scheduler/,
+    );
   }
   const parent = makeSchedulable(function* (): SchedulableIterable<void> {
     check();
@@ -18,7 +28,7 @@ test("both schedulers reject nested entry in generators and callbacks", async ()
   });
 
   parent();
-  await asyncScheduler(parent, []);
+  await async(parent)();
   assert.throws(() => getSignal(), /synchronous scheduler execution/);
 });
 
@@ -36,5 +46,5 @@ test("execute composition preserves safe generator execution in both modes", asy
   });
 
   assert.equal(parent(), 42);
-  assert.equal(await asyncScheduler(parent, []), 42);
+  assert.equal(await async(parent)(), 42);
 });

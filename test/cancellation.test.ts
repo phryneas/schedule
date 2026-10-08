@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { makeSchedulable, asyncScheduler, getSignal, yieldNow, execute } from "../src/index.ts";
+import { makeSchedulable, async, getSignal, yieldNow, execute } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
 test("AbortController cancels scheduled work", async () => {
@@ -11,7 +11,7 @@ test("AbortController cancels scheduled work", async () => {
     return 42;
   });
   const controller = new AbortController();
-  const pending = asyncScheduler(work, [], controller.signal);
+  const pending = async(work, controller.signal)();
   controller.abort();
 
   await assert.rejects(pending, { name: "AbortError" });
@@ -28,8 +28,8 @@ test("execute propagates cancellation without affecting concurrent runs", async 
     return yield* execute(work, undefined, []);
   });
   const controller = new AbortController();
-  const pending = asyncScheduler(parent, [], controller.signal);
-  const independent = asyncScheduler(parent, []);
+  const pending = async(parent, controller.signal)();
+  const independent = async(parent)();
   controller.abort();
 
   await assert.rejects(pending, { name: "AbortError" });
@@ -46,6 +46,6 @@ test("ordinary execute callbacks receive context and clear it when throwing", as
     }, undefined, []);
   });
 
-  await assert.rejects(asyncScheduler(parent, []), (error) => error === reason);
+  await assert.rejects(async(parent)(), (error) => error === reason);
   assert.throws(() => getSignal(), /synchronous scheduler execution/);
 });

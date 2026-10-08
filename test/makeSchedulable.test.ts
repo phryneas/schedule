@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { makeSchedulable, asyncScheduler, getSignal, yieldNow } from "../src/index.ts";
+import {
+  makeSchedulable,
+  async,
+  getSignal,
+  yieldNow,
+  sync,
+} from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
-const sum = makeSchedulable(function* (values: number[]): SchedulableIterable<number> {
+const sum = makeSchedulable(function* (
+  values: number[],
+): SchedulableIterable<number> {
   const signal = getSignal();
   let total = 0;
   for (const value of values) {
@@ -15,8 +23,20 @@ const sum = makeSchedulable(function* (values: number[]): SchedulableIterable<nu
 
 test("sum runs synchronously", () => {
   assert.equal(sum([1, 2, 3]), 6);
+  assert.equal(sync(sum)([1, 2, 3]), 6);
 });
 
 test("sum runs with the scheduler", async () => {
-  assert.equal(await asyncScheduler(sum, [[1, 2, 3]]), 6);
+  assert.equal(await async(sum)([1, 2, 3]), 6);
+});
+
+test("sync and async forward arguments and this", async () => {
+  const add = makeSchedulable(function* (
+    this: { offset: number },
+    value: number,
+  ): SchedulableIterable<number> {
+    return this.offset + value;
+  });
+  assert.equal(sync(add).call({ offset: 10 }, 2), 12);
+  assert.equal(await async(add).call({ offset: 10 }, 2), 12);
 });
