@@ -5,14 +5,24 @@
   "license": "MIT",
   "author": "Lenz Weber-Tronic",
   "type": "module",
-  "main": "index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "test": "npm run test:types && node --test test/*.test.ts",
     "test:types": "tsc --project tsconfig.test-types.json",
-    "build": "tsc"
+    "prebuild": "node -e \"require('fs').rmSync('./dist', { recursive: true, force: true, maxRetries: process.platform === 'win32' ? 10 : 0 })\"",
+    "build": "tsc",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "expect-type": "^1.4.0",
     "typescript": "^7.0.2"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }
