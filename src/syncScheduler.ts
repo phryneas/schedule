@@ -32,13 +32,16 @@ export function sync<
 export function executeIterableSync<T>(iterable: SchedulableIterable<T>): T {
   const iterator = iterable[Symbol.iterator]();
   let nextArg: unknown;
+  let throwing = false;
   do {
-    const result = iterator.next(nextArg);
+    const result = throwing ? iterator.throw(nextArg) : iterator.next(nextArg);
+    throwing = false;
     nextArg = undefined;
     if (result.done) {
       return result.value;
     }
-    switch (result.value.kind) {
+    try {
+      switch (result.value.kind) {
       case "getSignal": {
         nextArg = syncSignal;
         break;
@@ -58,6 +61,10 @@ export function executeIterableSync<T>(iterable: SchedulableIterable<T>): T {
         nextArg = sync.apply(thisArg, args);
         break;
       }
+      }
+    } catch (error) {
+      nextArg = error;
+      throwing = true;
     }
     // eslint-disable-next-line no-constant-condition
   } while (true);

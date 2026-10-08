@@ -1,5 +1,6 @@
 import { schedulableImplementationSignal } from "./internal.ts";
 import { isSchedulableFunction } from "./isSchedulableFunction.ts";
+import type { Command } from "./commands.ts";
 import type {
   SchedulableIterable,
   SchedulableMarker,
@@ -67,13 +68,16 @@ function executeIterableAsync<T>(
   async function* iterate(): AsyncGenerator<void, T> {
     const iterator = iterable[Symbol.iterator]();
     let nextArg: unknown;
+    let throwing = false;
     do {
-      const result = iterator.next(nextArg);
+      const result: IteratorResult<Command, T> = throwing ? iterator.throw(nextArg) : iterator.next(nextArg);
+      throwing = false;
       nextArg = undefined;
       if (result.done) {
         return result.value as Awaited<T>;
       }
-      switch (result.value.kind) {
+      try {
+        switch (result.value.kind) {
         case "getSignal": {
           scheduleSignal.throwIfAborted();
           nextArg = scheduleSignal;
@@ -116,6 +120,10 @@ function executeIterableAsync<T>(
           scheduleSignal.bump();
           continue;
         }
+        }
+      } catch (error) {
+        nextArg = error;
+        throwing = true;
       }
     } while (true);
   }
