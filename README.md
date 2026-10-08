@@ -150,5 +150,3 @@ try {
 
 Work stops at its next cancellation check. To cancel an external operation too,
 pass it an abort signal if its API supports one.
-
-See [TODOs](TODOs.md) for current limitations and follow-up work.
