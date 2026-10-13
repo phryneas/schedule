@@ -14,22 +14,23 @@ test("standalone generator overloads preserve published call signatures", async 
   t.after(() => rm(directory, { recursive: true, force: true }));
   const runtime = join(root, "src/index.ts");
   const output = transformSource(`
-    export function identity<T>(value: T): T { return value; }
+    function plain<T>(value: T): T { return value; }
+    export function identity<T>(value: T): T { return plain(value); }
     export function nullable(value: null | undefined): void;
     export function nullable(value: string): string;
     export function nullable(value: string | null | undefined): string | undefined;
     export function nullable(value: string | null | undefined): string | undefined {
-      if (value) return value;
+      if (value) return plain(value);
     }
     export function pick(x: number): number;
     export function pick(x: string): string;
-    export function pick(x: number | string): number | string { return x; }
+    export function pick(x: number | string): number | string { return plain(x); }
 
     export class Picker {
-      identity<T>(value: T): T { return value; }
+      identity<T>(value: T): T { return plain(value); }
       pick(x: number): number;
       pick(x: string): string;
-      pick(x: number | string): number | string { return x; }
+      pick(x: number | string): number | string { return plain(x); }
     }
   `, "input.ts", { runtimeModule: runtime });
   assert.match(output, /function\* _pickImpl/);

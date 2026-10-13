@@ -46,6 +46,7 @@ export const settings = {
   const output = transformSource(`${untouched}
 
 export function add(amount: number): number {
+  value.toString();
 ${body}
 }
 

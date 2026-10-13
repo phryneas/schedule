@@ -12,7 +12,7 @@ export interface Exclusion {
 }
 
 export interface SourceAnalysis {
-  functions: Map<number, { skip: boolean; signature?: string; thisType?: string }>;
+  functions: Map<number, { skip: boolean; signature?: string }>;
   calls: Map<number, { direct: boolean }>;
   constructors: Map<number, string>;
 }
@@ -40,18 +40,6 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
       const skip = excluded(node) || signatures.some(sig => !!checker.getTypePredicateOfSignature(sig));
       const signature = signatures.length === 1 ? printSignature(signatures[0]!, node) : undefined;
       result.functions.set(node.end, { skip, ...(signature ? { signature } : {}) });
-      if (isMethodDeclaration(node) && node.parent.kind === SyntaxKind.ObjectLiteralExpression) {
-        let thisType: string | undefined;
-        function findThis(child: Node): void {
-          if (thisType || isFunctionDeclaration(child) || isFunctionExpression(child) || isMethodDeclaration(child) || isClassDeclaration(child)) return;
-          if (child.kind === SyntaxKind.ThisKeyword) {
-            const type = checker.getTypeAtLocation(child);
-            if (type) thisType = checker.typeToString(type, node, NodeBuilderFlags.NoTruncation | NodeBuilderFlags.UseFullyQualifiedType);
-          } else child.forEachChild(findThis);
-        }
-        node.body?.forEachChild(findThis);
-        if (thisType) result.functions.get(node.end)!.thisType = thisType;
-      }
     }
     if (isCallExpression(node)) {
       const signature = checker.getResolvedSignature(node);

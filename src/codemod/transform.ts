@@ -35,6 +35,35 @@ export default function schedulerPlugin(
           return (ast.program.body[0] as Types.TSTypeAliasDeclaration).typeAnnotation as Types.TSFunctionType;
         }
 
+        function hasWork(path: NodePath<any>): boolean {
+          let found = false;
+          path.traverse({
+            Function(inner) { inner.skip(); },
+            Class(inner) { inner.skip(); },
+            Loop() { found = true; },
+            CallExpression() { found = true; },
+            OptionalCallExpression() { found = true; },
+            NewExpression() { found = true; },
+            TaggedTemplateExpression() { found = true; },
+          });
+          return found;
+        }
+
+        function eligibleScope(path: NodePath<any>): boolean {
+          if (path.isClassMethod() || path.isClassPrivateMethod()) return true;
+          if (path.isObjectMethod()) return false;
+          const parent = path.parentPath!;
+          if (parent.isClassProperty() || parent.isClassPrivateProperty()) return true;
+          if (parent.isProgram()) return true;
+          if (parent.isExportDeclaration()) return parent.parentPath.isProgram();
+          if (parent.isVariableDeclarator() && path.key === "init") {
+            const declaration = parent.parentPath;
+            const container = declaration.parentPath!;
+            return container.isProgram() || container.isExportNamedDeclaration() && container.parentPath.isProgram();
+          }
+          return false;
+        }
+
         program.traverse({
           NewExpression(path) {
             const type = options.analysis?.constructors.get(path.node.end!);
@@ -54,12 +83,16 @@ export default function schedulerPlugin(
           },
           Function(path) {
             const info = options.analysis?.functions.get(path.node.end!);
+            if (!eligibleScope(path)) return;
             if (info?.skip || t.isTSTypePredicate((path.node.returnType as Types.TSTypeAnnotation)?.typeAnnotation)) {
               path.skip();
               return;
             }
             if (path.node.generator) {
               path.skip();
+              return;
+            }
+            if (!hasWork(path)) {
               return;
             }
             if (path.isClassPrivateMethod()) {
@@ -77,11 +110,6 @@ export default function schedulerPlugin(
                 }
                 if (!(target as any).typeAnnotation && annotation) (target as any).typeAnnotation = clone(annotation);
               });
-            }
-            if (info?.thisType && path.isObjectMethod() && !path.node.async && !path.node.params.some(p => t.isIdentifier(p, { name: "this" }))) {
-              const receiver = t.identifier("this");
-              receiver.typeAnnotation = parseSignature(`() => ${info.thisType}`).typeAnnotation!;
-              path.node.params.unshift(receiver);
             }
             if (path.node.body) functions.push(path);
           },

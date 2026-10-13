@@ -5,9 +5,8 @@ import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { transformProject } from "../src/codemod/index.ts";
-import { async as scheduled } from "../src/index.ts";
 
-test("object methods retain their contextual receiver type", async t => {
+test("object methods retain their original code and contextual receiver type", async t => {
   const root = resolve(".");
   await mkdir(join(root, ".tmp"), { recursive: true });
   const directory = await mkdtemp(join(root, ".tmp/contextual-this-"));
@@ -24,13 +23,14 @@ test("object methods retain their contextual receiver type", async t => {
     include: ["source/*.mts"],
   }));
   await writeFile(join(source, "input.mts"), `
+    function identity<T>(value: T): T { return value; }
     interface Self { self(): Self; }
     export function create(): Self {
-      return { self() { return this; } };
+      return { self() { return identity(this); } };
     }
     interface Sequence { [Symbol.iterator](): Sequence; }
     export function sequence(): Sequence {
-      return { [Symbol.iterator]() { return this; } };
+      return { [Symbol.iterator]() { return identity(this); } };
     }
   `);
   await transformProject({
@@ -41,8 +41,9 @@ test("object methods retain their contextual receiver type", async t => {
   assert.equal(await readFile(join(output, "__tests__/example.ts"), "utf8"), originalTest);
   const generated = join(output, "input.mts");
   const code = await readFile(generated, "utf8");
-  assert.match(code, /function\*\s*\(this: Self\)/);
-  assert.match(code, /function\*\s*\(this: Sequence\)/);
+  assert.ok(code.includes("self() { return identity(this); }"));
+  assert.ok(code.includes("[Symbol.iterator]() { return identity(this); }"));
+  assert.doesNotMatch(code, /makeSchedulable/);
   const result = spawnSync(join(root, "node_modules/.bin/tsc"), [
     "--ignoreConfig", "--noEmit", "--strict", "--target", "esnext",
     "--module", "nodenext", "--allowImportingTsExtensions", generated,
@@ -51,8 +52,6 @@ test("object methods retain their contextual receiver type", async t => {
   const module = await import(pathToFileURL(generated).href);
   const value = module.create();
   assert.equal(value.self(), value);
-  assert.equal(await scheduled(value.self).bind(value)(), value);
   const sequence = module.sequence();
   assert.equal(sequence[Symbol.iterator](), sequence);
-  assert.equal(await scheduled(sequence[Symbol.iterator]).bind(sequence)(), sequence);
 });
