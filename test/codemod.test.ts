@@ -69,6 +69,57 @@ test("receiver temporaries avoid existing names and nested-scope references", as
   assert.deepEqual(await scheduled(module.run)(getObject), [7, 33, 11, 22]);
 });
 
+test("optional methods preserve receivers, getter evaluation, and conditional arguments", async () => {
+  const module = await load(`
+    export function run(getReceiver, key, argument) {
+      return getReceiver()[key()]?.(argument());
+    }
+    export function optionalReceiver(getReceiver, key, argument) {
+      return getReceiver()?.[key()]?.(argument());
+    }
+    export function returnedCallback(queue, argument) {
+      return queue.shift()?.(argument());
+    }
+  `);
+  for (const run of [module.run, scheduled(module.run), module.optionalReceiver, scheduled(module.optionalReceiver)]) {
+    for (const present of [false, true]) {
+      const events: string[] = [];
+      const receiver = {
+        value: 10,
+        get method() {
+          events.push("get");
+          return present ? makeSchedulable(function* (this: typeof receiver, value: number) {
+            assert.equal(this, receiver);
+            yield* commands.yieldNow();
+            events.push("call");
+            return this.value + value;
+          }) : undefined;
+        },
+      };
+      const result = await run(
+        () => { events.push("receiver"); return receiver; },
+        () => { events.push("key"); return "method"; },
+        () => { events.push("argument"); return 3; },
+      );
+      assert.equal(result, present ? 13 : undefined);
+      assert.deepEqual(events, present ? ["receiver", "key", "get", "argument", "call"] : ["receiver", "key", "get"]);
+    }
+  }
+  const unexpected = () => { throw new Error("must not evaluate"); };
+  assert.equal(module.optionalReceiver(() => null, unexpected, unexpected), undefined);
+  assert.equal(await scheduled(module.optionalReceiver)(() => undefined, unexpected, unexpected), undefined);
+  for (const run of [module.returnedCallback, scheduled(module.returnedCallback)]) {
+    const queue = [makeSchedulable(function* (this: unknown, value: number) {
+      assert.equal(this, undefined);
+      yield* commands.yieldNow();
+      return value;
+    })];
+    assert.equal(await run(queue, () => 7), 7);
+    assert.equal(queue.length, 0);
+    assert.equal(await run(queue, unexpected), undefined);
+  }
+});
+
 test("receiver assignments stay conditional and preserve nested argument evaluation order", async () => {
   const source = `
     export function run(enabled, choose, mark) {

@@ -1,4 +1,6 @@
-import { transformSync } from "@babel/core";
+import { transformFromAstSync } from "@babel/core";
+import { parse, print, types } from "recast";
+import * as typescriptParser from "recast/parsers/typescript.js";
 import schedulerTransform from "./transform.ts";
 import type { SourceAnalysis } from "./analyze.ts";
 
@@ -18,11 +20,31 @@ export function transformSource(
   options: CodemodOptions = {},
   analysis?: SourceAnalysis,
 ): string {
-  return transformSync(source, {
+  const ast = parse(source, { parser: typescriptParser });
+  transformFromAstSync(ast, source, {
     filename,
     configFile: false,
     babelrc: false,
-    parserOpts: { plugins: ["typescript"] },
+    cloneInputAst: false,
+    code: false,
+    ast: true,
     plugins: [[schedulerTransform, { ...options, analysis }]],
-  })!.code! + "\n";
+  });
+  types.visit(ast, {
+    visitTemplateLiteral(path) {
+      // Reprint literal contents without reindenting their significant whitespace.
+      Object.defineProperty(path.node, "original", { value: null });
+      for (const quasi of path.node.quasis) Object.defineProperty(quasi, "original", { value: null });
+      this.traverse(path);
+    },
+    visitYieldExpression(path) {
+      // Preserve yield precedence when Recast reuses a surrounding type assertion.
+      if (path.parentPath.node.type === "TSAsExpression" || path.parentPath.node.type === "TSSatisfiesExpression") {
+        path.replace(types.builders.parenthesizedExpression(path.node));
+        return false;
+      }
+      this.traverse(path);
+    },
+  });
+  return print(ast, { tabWidth: 2, quote: "auto", lineTerminator: source.includes("\r\n") ? "\r\n" : "\n" }).code;
 }

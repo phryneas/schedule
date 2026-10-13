@@ -15,6 +15,9 @@ test("object methods retain their contextual receiver type", async t => {
   const source = join(directory, "source");
   const output = join(directory, "output");
   await mkdir(source);
+  await mkdir(join(source, "__tests__"));
+  const originalTest = "// This file must be copied verbatim.\n\nexport function test() { return 42; }\n";
+  await writeFile(join(source, "__tests__/example.ts"), originalTest);
   const config = join(directory, "tsconfig.json");
   await writeFile(config, JSON.stringify({
     compilerOptions: { strict: true, target: "esnext", module: "nodenext" },
@@ -33,7 +36,9 @@ test("object methods retain their contextual receiver type", async t => {
   await transformProject({
     tsconfig: config, sourceDirectory: source, outputDirectory: output,
     runtimeModule: join(root, "src/index.ts"),
+    excludeFiles: ["**/__tests__/**"],
   });
+  assert.equal(await readFile(join(output, "__tests__/example.ts"), "utf8"), originalTest);
   const generated = join(output, "input.mts");
   const code = await readFile(generated, "utf8");
   assert.match(code, /function\*\s*\(this: Self\)/);

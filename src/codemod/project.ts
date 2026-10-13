@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, matchesGlob, relative, resolve, sep } from "node:path";
 import { API } from "typescript/unstable/sync";
 import { analyze } from "./analyze.ts";
 import type { Exclusion } from "./analyze.ts";
@@ -12,6 +12,8 @@ export interface ProjectOptions extends CodemodOptions {
   sourceDirectory: string;
   outputDirectory: string;
   exclude?: Exclusion[];
+  /** Copy matching files unchanged; globs are relative to sourceDirectory. */
+  excludeFiles?: string[];
 }
 
 /** Write a transformed source tree; compile this tree to emit JS and declarations. */
@@ -42,6 +44,8 @@ export async function transformProject(options: ProjectOptions): Promise<void> {
         if (entry.isDirectory()) {
           await mkdir(target);
           await convert(path);
+        } else if (options.excludeFiles?.some(pattern => matchesGlob(path.split(sep).join("/"), pattern))) {
+          await cp(sourcePath, target);
         } else if (entry.isFile() && /\.(?:m|c)?ts$/.test(entry.name) && !/\.d\.(?:m|c)?ts$/.test(entry.name)) {
           const source = project.program.getSourceFile(sourcePath);
           if (!source) throw new Error(`Source is not included in the TypeScript project: ${sourcePath}`);

@@ -181,7 +181,8 @@ export default function schedulerPlugin(
               exit(call) {
                 const node = call.node;
                 const info = options.analysis?.calls.get(node.end!);
-                if (info?.direct) return;
+                const superMethod = t.isMemberExpression(node.callee) && t.isSuper(node.callee.object);
+                if (info?.direct && !superMethod) return;
                 if (t.isSuper(node.callee) || t.isImport(node.callee)) return;
                 if (t.isIdentifier(node.callee) && node.callee.name === make.name) return;
                 if (t.isIdentifier(node.callee) && node.callee.name === "eval") {
@@ -198,8 +199,16 @@ export default function schedulerPlugin(
                 let hasReceiver = false;
                 const before: Types.Expression[] = [];
                 if (t.isMemberExpression(fn)) {
-                  if (t.isSuper(fn.object)) return;
-                  if (!fn.computed && t.isIdentifier(fn.property) && (fn.property.name === "call" || fn.property.name === "apply")) {
+                  if (t.isSuper(fn.object)) {
+                    const cls = path.isClassMethod() ? path.parentPath.parentPath!.node : undefined;
+                    if (!(t.isClassDeclaration(cls) || t.isClassExpression(cls)) || !t.isIdentifier(cls.superClass)) {
+                      throw call.buildCodeFrameError("Superclass method calls require a named superclass.");
+                    }
+                    const base = path.node.static ? clone(cls.superClass) : t.memberExpression(clone(cls.superClass), t.identifier("prototype"));
+                    fn = t.memberExpression(base, clone(fn.property), fn.computed);
+                    receiver = t.thisExpression();
+                    hasReceiver = true;
+                  } else if (!fn.computed && t.isIdentifier(fn.property) && (fn.property.name === "call" || fn.property.name === "apply")) {
                     const first = node.arguments[0];
                     if (first && t.isSpreadElement(first)) return;
                     receiver = first as Types.Expression ?? receiver;
@@ -219,13 +228,13 @@ export default function schedulerPlugin(
                     }
                   }
                 }
-                let factory: Types.Expression = t.callExpression(t.memberExpression(clone(commands), t.identifier("execute")), [fn]);
+                let factory: Types.Expression = info?.direct ? fn : t.callExpression(t.memberExpression(clone(commands), t.identifier("execute")), [fn]);
                 if (hasReceiver && !applyArgs) factory = t.callExpression(t.memberExpression(factory, t.identifier("bind")), [receiver]);
                 const command = applyArgs
                   ? t.callExpression(t.memberExpression(factory, t.identifier("apply")), [receiver, applyArgs])
                   : t.callExpression(factory, args);
                 if (node.typeParameters && !applyArgs) command.typeParameters = clone(node.typeParameters);
-                const delegated = t.yieldExpression(command, true);
+                const delegated = info?.direct ? command : t.yieldExpression(command, true);
                 call.replaceWith(before.length ? t.sequenceExpression([...before, delegated]) : delegated);
                 call.skip();
               },
@@ -237,16 +246,36 @@ export default function schedulerPlugin(
               path.scope.push({ id: clone(target), kind: "let" });
               let value: Types.Expression;
               let invocation: Types.CallExpression;
-              if (t.isOptionalMemberExpression(node.callee) && node.callee.optional && !node.optional) {
+              if (node.optional && (t.isMemberExpression(node.callee) || t.isOptionalMemberExpression(node.callee)) && !t.isSuper(node.callee.object)) {
+                const member = node.callee;
+                const receiver = path.scope.generateUidIdentifier("receiver");
+                path.scope.push({ id: clone(receiver), kind: "let" });
+                invocation = t.callExpression(t.memberExpression(clone(target), t.identifier("call")), [clone(receiver), ...node.arguments]);
+                invocation.end = node.end ?? null;
+                if (node.typeParameters) invocation.typeParameters = clone(node.typeParameters);
+                localCalls.add(invocation);
+                const invoke = t.sequenceExpression([
+                  t.assignmentExpression("=", clone(target), t.memberExpression(clone(receiver), clone(member.property), member.computed)),
+                  t.conditionalExpression(t.binaryExpression("==", clone(target), t.nullLiteral()), t.unaryExpression("void", t.numericLiteral(0)), invocation),
+                ]);
+                call.replaceWith(t.sequenceExpression([
+                  t.assignmentExpression("=", clone(receiver), member.object),
+                  t.isOptionalMemberExpression(member) && member.optional
+                    ? t.conditionalExpression(t.binaryExpression("==", clone(receiver), t.nullLiteral()), t.unaryExpression("void", t.numericLiteral(0)), invoke)
+                    : invoke,
+                ]));
+                return;
+              } else if (t.isOptionalMemberExpression(node.callee) && node.callee.optional && !node.optional) {
                 value = node.callee.object;
                 invocation = t.callExpression(t.memberExpression(clone(target), clone(node.callee.property), node.callee.computed), node.arguments);
-              } else if (node.optional && t.isIdentifier(node.callee)) {
+              } else if (node.optional && (t.isIdentifier(node.callee) || t.isCallExpression(node.callee))) {
                 value = node.callee;
                 invocation = t.callExpression(clone(target), node.arguments);
               } else {
                 throw call.buildCodeFrameError("This optional call needs to be simplified before transformation.");
               }
               invocation.end = node.end ?? null;
+              if (node.typeParameters) invocation.typeParameters = clone(node.typeParameters);
               localCalls.add(invocation);
               call.replaceWith(t.sequenceExpression([
                 t.assignmentExpression("=", clone(target), value),
