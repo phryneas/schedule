@@ -29,7 +29,23 @@ export default function schedulerPlugin(
         const localCalls = new WeakSet<Types.CallExpression>();
         let used = false;
         let usedTypes = false;
-        const clone = <T extends Types.Node>(node: T): T => t.cloneNode(node, true);
+        function clone<T extends Types.Node>(node: T): T {
+          const copy = t.cloneNode(node, true);
+          const originals: any[] = [];
+          t.traverseFast(node, original => { originals.push(original); });
+          let index = 0;
+          t.traverseFast(copy, (cloned: any) => {
+            const original = originals[index++];
+            if (original.comments) cloned.comments = original.comments;
+          });
+          return copy;
+        }
+        function preserveComments(target: any, ...sources: any[]) {
+          for (const source of sources) t.inheritsComments(target, source);
+          // Recast uses `comments`, which Babel's cloneNode/inheritsComments omit.
+          const comments = [...new Set(sources.flatMap(source => source.comments ?? []))];
+          if (comments.length) target.comments = comments;
+        }
         function parseSignature(text: string): Types.TSFunctionType {
           const ast = parseSync(`type Signature = ${text}`, { configFile: false, babelrc: false, parserOpts: { plugins: ["typescript"] } })!;
           return (ast.program.body[0] as Types.TSTypeAliasDeclaration).typeAnnotation as Types.TSFunctionType;
@@ -331,6 +347,8 @@ export default function schedulerPlugin(
             }
           }
           const overloads = overloadPaths.map(p => clone(p.node));
+          const commentSources = [...overloadPaths, path].flatMap(p =>
+            p.parentPath!.isExportDeclaration() ? [p.parentPath!.node, p.node] : [p.node]);
           transformCalls(path);
           const generator = t.functionExpression(null, path.node.params, path.node.body, true, false);
           generator.typeParameters = path.node.typeParameters;
@@ -367,7 +385,7 @@ export default function schedulerPlugin(
             const statement = exported ? path.parentPath : path;
             const container = statement.parentPath!;
             const declaration = t.variableDeclaration("var", [t.variableDeclarator(clone(name), wrapped)]);
-            t.inheritsComments(declaration, original);
+            preserveComments(declaration, ...commentSources);
             const list = hoisted.get(container) ?? [];
             list.unshift(...implementations, declaration);
             hoisted.set(container, list);
@@ -398,8 +416,12 @@ export default function schedulerPlugin(
               property.declare = true;
               property.static = method.static;
               property.typeAnnotation = t.tsTypeAnnotation(fullSignature(signatures));
+              preserveComments(property, ...commentSources);
               path.replaceWith(property);
-            } else path.remove();
+            } else {
+              preserveComments(definition, ...commentSources);
+              path.remove();
+            }
             // Install prototype methods before static field initializers run.
             classBody.unshiftContainer("body", t.staticBlock([...implementations, definition]));
           } else {

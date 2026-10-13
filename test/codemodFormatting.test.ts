@@ -65,3 +65,43 @@ test("printing preserves template whitespace and yield precedence in type assert
   assert.match(output, /\(yield\* .*\) as string/);
   assert.ok(parseSync(output, { configFile: false, babelrc: false, parserOpts: { plugins: ["typescript"] } }));
 });
+
+test("function and method documentation survives replacement and hoisting", () => {
+  const comments = [
+    "/** Exported docs.\n * @param value - The input.\n * @example work(1);\n */",
+    "/** Local docs. */",
+    "/** Default docs. */",
+    "/** Overload docs. */",
+    "/** Method docs. */",
+  ];
+  const source = `
+    ${comments[0]}
+    export function work(value: number): number { return helper(value); }
+    ${comments[1]}
+    function helper(value: number): number { return Number(value); }
+    ${comments[2]}
+    export default function run(): number { return work(1); }
+    ${comments[3]}
+    export function overloaded(value: number): number;
+    export function overloaded(value: number): number { return work(value); }
+    export class Worker {
+      ${comments[4]}
+      method(value: number): number { return work(value); }
+    }
+  `;
+  const output = transformSource(source, "fixture.ts");
+  const parsed = parseSync(output, { configFile: false, babelrc: false, parserOpts: { plugins: ["typescript"] } })!;
+  const expected = parseSync(source, { configFile: false, babelrc: false, parserOpts: { plugins: ["typescript"] } })!;
+  assert.deepEqual(parsed.comments!.map(c => c.value.trim()).sort(), expected.comments!.map(c => c.value.trim()).sort());
+  assert.ok(output.indexOf("Exported docs.") < output.indexOf("var work ="));
+  assert.ok(output.indexOf("Method docs.") < output.indexOf("declare method:"));
+});
+
+test("comments inside cloned return types are preserved", () => {
+  const output = transformSource(`
+    export class Worker {
+      values(): Array<number /* item type */> { return getValues(); }
+    }
+  `, "fixture.ts");
+  assert.ok(output.includes("/* item type */"));
+});
