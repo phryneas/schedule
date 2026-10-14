@@ -1,5 +1,18 @@
-import type { SchedulableIterable, SchedulableMarker, ScheduleSignal } from "./types.ts";
+import type {
+  SchedulableIterable,
+  SchedulableMarker,
+  ScheduleSignal,
+} from "./types.ts";
 import type { schedulableImplementationSignal } from "./internal.ts";
+import type {
+  HasMultipleSignatures,
+  MapResults,
+  TypeFunction,
+} from "./mapResults.ts";
+
+interface ToSchedulable extends TypeFunction {
+  readonly output: SchedulableIterable<this["input"]>;
+}
 
 export type Command =
   | { kind: "getSignal" }
@@ -28,10 +41,22 @@ export function* getSignal(): SchedulableIterable<ScheduleSignal> {
   return (yield { kind: "getSignal" }) as ScheduleSignal;
 }
 
-export function execute<Fn extends SchedulableMarker<(...args: any[]) => SchedulableIterable<unknown>, any, any>>(
-  fn: Fn,
+export function execute<Fn extends (...args: any[]) => unknown>(
+  fn: HasMultipleSignatures<Fn> extends true
+    ? Fn
+    : Fn extends SchedulableMarker<
+        (...args: any[]) => SchedulableIterable<unknown>,
+        any,
+        any
+      > ? Fn : never,
   startImmediately?: boolean,
-): Fn[typeof schedulableImplementationSignal];
+): Fn extends SchedulableMarker<
+  (...args: any[]) => SchedulableIterable<unknown>,
+  any,
+  any
+>
+  ? Fn[typeof schedulableImplementationSignal]
+  : MapResults<Fn, ToSchedulable>;
 export function execute<Ret, Args extends Array<unknown>, ThisArg>(
   fn: (this: ThisArg, ...args: Args) => Ret,
   startImmediately?: boolean,
@@ -44,7 +69,10 @@ export function execute(
   fn: Function,
   startImmediately = false,
 ) {
-  return function* executeCommand(this: unknown, ...args: unknown[]): SchedulableIterable<unknown> {
+  return function* executeCommand(
+    this: unknown,
+    ...args: unknown[]
+  ): SchedulableIterable<unknown> {
     const result = yield {
       kind: "execute" as const,
       fn: fn as any,
