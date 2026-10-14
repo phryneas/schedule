@@ -17,21 +17,20 @@ export class Counter {
   assert.equal(transformSource(source, "fixture.ts"), source);
 });
 
-test("loops and calls make a named function eligible", () => {
+test("functions without generated yields remain unchanged", () => {
   const bodies = [
     "for (let i = 0; i < 2; i++) {}",
     "for (const value of values) {}",
     "for (const key in values) {}",
-    "while (values.length) { values.pop(); }",
+    "while (values.length) { values.length--; }",
     "do { values.length--; } while (values.length);",
     "return helper();",
-    "return helper?.();",
     "return new Helper();",
     "return tag`text`;",
   ];
   for (const body of bodies) {
-    const output = transformSource(`export function work() { ${body} }`, "fixture.ts");
-    assert.match(output, /var work = _makeSchedulable/, body);
+    const source = `export function work() { ${body} }`;
+    assert.equal(transformSource(source, "fixture.ts"), source, body);
   }
 });
 
@@ -57,7 +56,7 @@ test("inline callbacks remain unchanged even when they contain calls or loops", 
     assert.ok(output.includes(callback));
     assert.equal((output.match(/_makeSchedulable\(/g) ?? []).length, 1);
   }
-  const named = transformSource("export const work = value => helper(value);", "fixture.ts");
+  const named = transformSource("function helper(value) { return value; }\nexport const work = value => helper(value);", "fixture.ts");
   assert.match(named, /const work = _makeSchedulable/);
 });
 

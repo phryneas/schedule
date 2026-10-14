@@ -19,7 +19,7 @@ export default function schedulerPlugin(
   return {
     name: "schedulable-functions",
     visitor: {
-      Program(program) {
+      Program(program, state) {
         const make = program.scope.generateUidIdentifier("makeSchedulable");
         const commands = program.scope.generateUidIdentifier("commands");
         const iterable = program.scope.generateUidIdentifier("SchedulableIterable");
@@ -51,16 +51,12 @@ export default function schedulerPlugin(
           return (ast.program.body[0] as Types.TSTypeAliasDeclaration).typeAnnotation as Types.TSFunctionType;
         }
 
-        function hasWork(path: NodePath<any>): boolean {
+        function hasYield(path: NodePath<any>): boolean {
           let found = false;
           path.traverse({
             Function(inner) { inner.skip(); },
             Class(inner) { inner.skip(); },
-            Loop() { found = true; },
-            CallExpression() { found = true; },
-            OptionalCallExpression() { found = true; },
-            NewExpression() { found = true; },
-            TaggedTemplateExpression() { found = true; },
+            YieldExpression() { found = true; },
           });
           return found;
         }
@@ -81,13 +77,6 @@ export default function schedulerPlugin(
         }
 
         program.traverse({
-          NewExpression(path) {
-            const type = options.analysis?.constructors.get(path.node.end!);
-            if (type) {
-              const parsed = parseSignature(`() => ${type}`).typeAnnotation!.typeAnnotation;
-              if (t.isTSTypeReference(parsed) && parsed.typeParameters) path.node.typeParameters = parsed.typeParameters;
-            }
-          },
           CallExpression(path) {
             if (!t.isIdentifier(path.node.callee)) return;
             const binding = path.scope.getBinding(path.node.callee.name);
@@ -108,28 +97,54 @@ export default function schedulerPlugin(
               path.skip();
               return;
             }
-            if (!hasWork(path)) {
-              return;
-            }
-            if (path.isClassPrivateMethod()) {
-              throw path.buildCodeFrameError("Private methods are not supported by the scheduler transform yet.");
-            }
             if ((path.isClassMethod() || path.isObjectMethod()) && path.node.kind !== "method") return;
-            if (info?.signature && !path.node.async) {
-              const sig = parseSignature(info.signature);
-              const params = sig.parameters.filter(p => !t.isIdentifier(p, { name: "this" }));
-              path.node.params.forEach((param, index) => {
-                const target = t.isAssignmentPattern(param) ? param.left : param;
-                let annotation = (params[index] as any)?.typeAnnotation;
-                if (t.isRestElement(param)) {
-                  annotation = t.tsTypeAnnotation(t.tsTupleType(params.slice(index).map(p => clone((p as any).typeAnnotation.typeAnnotation))));
-                }
-                if (!(target as any).typeAnnotation && annotation) (target as any).typeAnnotation = clone(annotation);
-              });
-            }
             if (path.node.body) functions.push(path);
           },
         });
+
+        const directives = new Map<NodePath<any>, Array<{ block: NodePath<Types.BlockStatement>; comment: Types.Comment }>>();
+        const comments = new Set<Types.Comment>(state.file.ast.comments ?? []);
+        t.traverseFast(program.node, (node: any) => {
+          for (const key of ["comments", "leadingComments", "trailingComments", "innerComments"]) {
+            for (const comment of node[key] ?? []) comments.add(comment);
+          }
+        });
+        const markers = [...comments].filter(comment =>
+          comment.type === "CommentLine" && comment.value.trim() === "@phryneas/schedule may-yield-here");
+        for (const comment of markers) {
+          const start = comment.start!;
+          const end = comment.end!;
+          const source = state.file.code;
+          const lineStart = source.lastIndexOf("\n", start - 1) + 1;
+          const lineEnd = source.indexOf("\n", end);
+          let block: NodePath<Types.BlockStatement> | undefined;
+          program.traverse({
+            BlockStatement(candidate) {
+              if (candidate.node.start! < start && candidate.node.end! > end &&
+                  (!block || candidate.node.start! > block.node.start!)) block = candidate;
+            },
+          });
+          if (!block || source.slice(lineStart, start).trim() || source.slice(end, lineEnd < 0 ? source.length : lineEnd).trim() ||
+              block.node.body.some(statement => statement.start! < start && statement.end! > end)) {
+            throw program.buildCodeFrameError("may-yield-here must be a standalone comment between statements inside a braced body.");
+          }
+          const owner = block.getFunctionParent();
+          if (!owner || !functions.includes(owner) || owner.node.async || owner.node.generator) {
+            throw block.buildCodeFrameError("may-yield-here is inside a function excluded from transformation (or outside a function).");
+          }
+          const entries = directives.get(owner) ?? [];
+          entries.push({ block, comment });
+          directives.set(owner, entries);
+        }
+        if (markers.length) {
+          // Babel and Recast attach the same comment to different neighboring nodes.
+          const removed = new Set(markers);
+          t.traverseFast(program.node, (node: any) => {
+            for (const key of ["comments", "leadingComments", "trailingComments", "innerComments"]) {
+              if (node[key]) node[key] = node[key].filter((comment: Types.Comment) => !removed.has(comment));
+            }
+          });
+        }
 
         // Keep declarations in place unless module initialization may execute code
         // or capture a function before its wrapper has been initialized. Deliberately
@@ -240,14 +255,21 @@ export default function schedulerPlugin(
 
         function transformCalls(path: NodePath<any>) {
           const body = path.get("body") as NodePath;
-          body.traverse({
-            Function(inner) { inner.skip(); },
-            Class(inner) { inner.skip(); },
+          const directSuperCalls: NodePath<Types.CallExpression>[] = [];
+          let processingDirectSuper = false;
+          const visitor = {
+            Function(inner: NodePath) { inner.skip(); },
+            Class(inner: NodePath) { inner.skip(); },
+            YieldExpression(inner: NodePath) { inner.skip(); },
             CallExpression: {
-              exit(call) {
+              exit(call: NodePath<Types.CallExpression>) {
                 const node = call.node;
                 const info = options.analysis?.calls.get(node.end!);
                 const superMethod = t.isMemberExpression(node.callee) && t.isSuper(node.callee.object);
+                if (info?.direct && superMethod && !processingDirectSuper) {
+                  directSuperCalls.push(call);
+                  return;
+                }
                 if (info?.direct && !superMethod) return;
                 if (t.isSuper(node.callee) || t.isImport(node.callee)) return;
                 if (t.isIdentifier(node.callee) && node.callee.name === make.name) return;
@@ -305,7 +327,7 @@ export default function schedulerPlugin(
                 call.skip();
               },
             },
-            OptionalCallExpression(call) {
+            OptionalCallExpression(call: NodePath<Types.OptionalCallExpression>) {
               const node = call.node;
               if (options.analysis?.calls.get(node.end!)?.direct) return;
               const target = path.scope.generateUidIdentifier("optional");
@@ -348,12 +370,63 @@ export default function schedulerPlugin(
                 t.conditionalExpression(t.binaryExpression("==", clone(target), t.nullLiteral()), t.unaryExpression("void", t.numericLiteral(0)), invocation),
               ]));
             },
-          });
+          };
+          body.traverse(visitor);
+          if (hasYield(path)) {
+            processingDirectSuper = true;
+            for (const call of directSuperCalls) visitor.CallExpression.exit(call);
+          }
         }
 
         for (const path of functions.reverse()) {
           if (path.removed) continue;
           if (path.node.async) continue;
+          const originalBody = path.node.body;
+          if (path.isArrowFunctionExpression() && !t.isBlockStatement(originalBody)) {
+            path.get("body").replaceWith(t.blockStatement([t.returnStatement(originalBody)]));
+          }
+          const checkpoints = directives.get(path);
+          if (checkpoints) {
+            const signal = path.scope.generateUidIdentifier("signal");
+            for (const { block, comment } of [...checkpoints].reverse()) {
+              const check = t.ifStatement(t.memberExpression(clone(signal), t.identifier("shouldYield")), t.blockStatement([
+                t.expressionStatement(t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("yieldNow")), []), true)),
+              ]));
+              const index = block.node.body.findIndex(statement => statement.start! > comment.end!);
+              block.node.body.splice(index < 0 ? block.node.body.length : index, 0, check);
+            }
+            path.node.body.body.unshift(t.variableDeclaration("const", [t.variableDeclarator(clone(signal),
+              t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("getSignal")), []), true))]));
+          }
+          transformCalls(path);
+          if (!hasYield(path)) {
+            path.node.body = originalBody;
+            continue;
+          }
+          if (path.isClassPrivateMethod()) {
+            throw path.buildCodeFrameError("Private methods are not supported by the scheduler transform yet.");
+          }
+          path.traverse({
+            Function(inner) { inner.skip(); },
+            Class(inner) { inner.skip(); },
+            NewExpression(constructor) {
+              const type = options.analysis?.constructors.get(constructor.node.end!);
+              if (!type) return;
+              const parsed = parseSignature(`() => ${type}`).typeAnnotation!.typeAnnotation;
+              if (t.isTSTypeReference(parsed) && parsed.typeParameters) constructor.node.typeParameters = parsed.typeParameters;
+            },
+          });
+          const info = options.analysis?.functions.get(path.node.end!);
+          if (info?.signature) {
+            const sig = parseSignature(info.signature);
+            const params = sig.parameters.filter(p => !t.isIdentifier(p, { name: "this" }));
+            path.node.params.forEach((param: any, index: number) => {
+              const target = t.isAssignmentPattern(param) ? param.left : param;
+              let annotation = (params[index] as any)?.typeAnnotation;
+              if (t.isRestElement(param)) annotation = t.tsTypeAnnotation(t.tsTupleType(params.slice(index).map(p => clone((p as any).typeAnnotation.typeAnnotation))));
+              if (!target.typeAnnotation && annotation) target.typeAnnotation = clone(annotation);
+            });
+          }
           if (path.isArrowFunctionExpression()) path.arrowFunctionToExpression();
           const original = clone(path.node) as any;
           const overloadPaths: NodePath<any>[] = [];
@@ -371,7 +444,6 @@ export default function schedulerPlugin(
           const overloads = overloadPaths.map(p => clone(p.node));
           const commentSources = [...overloadPaths, path].flatMap(p =>
             p.parentPath!.isExportDeclaration() ? [p.parentPath!.node, p.node] : [p.node]);
-          transformCalls(path);
           // Moving this body can change indentation. Reprint its template contents
           // verbatim, but leave templates in untouched functions alone.
           t.traverseFast(path.node.body, node => {

@@ -32,6 +32,12 @@ test("object methods retain their original code and contextual receiver type", a
     export function sequence(): Sequence {
       return { [Symbol.iterator]() { return identity(this); } };
     }
+    export function absoluteSum(values: number[]): number {
+      let total = 0;
+      for (const value of values) total += Math.abs(value);
+      return total;
+    }
+    export function emptyMap(): Map<string, number> { return new Map(); }
   `);
   await transformProject({
     tsconfig: config, sourceDirectory: source, outputDirectory: output,
@@ -54,4 +60,6 @@ test("object methods retain their original code and contextual receiver type", a
   assert.equal(value.self(), value);
   const sequence = module.sequence();
   assert.equal(sequence[Symbol.iterator](), sequence);
+  assert.equal(module.absoluteSum([-1, 2, -3]), 6);
+  assert.equal(module.emptyMap().size, 0);
 });

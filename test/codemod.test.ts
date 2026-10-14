@@ -60,7 +60,8 @@ test("hoisting fallback preserves early captures and indirect initialization cal
     export const captured = work;
     export const initial = start();
     function start() { return work(3); }
-    export function work(value) { return Number(value); }
+    function identity(value) { return value; }
+    export function work(value) { return identity(value); }
   `);
   assert.equal(module.captured, module.work);
   assert.equal(module.initial, 3);
