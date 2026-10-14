@@ -173,6 +173,13 @@ export default function schedulerPlugin(
               t.isExportAllDeclaration(node) || t.isFunctionDeclaration(node) ||
               t.isTSDeclareFunction(node) || t.isTSInterfaceDeclaration(node) || t.isTSTypeAliasDeclaration(node)) return false;
           if (t.isVariableDeclaration(node)) return node.declarations.some(d => !t.isIdentifier(d.id) || !passive(d.init));
+          if (t.isClassDeclaration(node)) {
+            return !!node.superClass || !!node.decorators?.length || node.body.body.some(member =>
+              t.isStaticBlock(member) ||
+              "computed" in member && member.computed ||
+              "decorators" in member && !!member.decorators?.length ||
+              "static" in member && member.static && "value" in member && !!member.value);
+          }
           return true;
         });
 
@@ -480,10 +487,6 @@ export default function schedulerPlugin(
               const thisParam = t.identifier("this");
               thisParam.typeAnnotation = t.tsTypeAnnotation(thisType);
               if (!generator.params.some(p => t.isIdentifier(p, { name: "this" }))) generator.params.unshift(thisParam);
-              for (const param of params) {
-                implementations.push(t.tsTypeAliasDeclaration(t.identifier(param.name), null,
-                  param.default ? clone(param.default) : param.constraint ? clone(param.constraint) : t.tsUnknownKeyword()));
-              }
               implementation = { ...implementation, params: generator.params };
             }
           }
@@ -556,7 +559,13 @@ export default function schedulerPlugin(
                 t.objectProperty(t.identifier("configurable"), t.booleanLiteral(true)),
               ]),
             ]));
-            const installation = t.staticBlock([...implementations, definition]);
+            const installationBody = [...implementations, definition];
+            const classParameters = (classBody.parentPath!.node as Types.ClassDeclaration).typeParameters as Types.TSTypeParameterDeclaration | null;
+            const initialize = t.arrowFunctionExpression([], t.blockStatement(installationBody));
+            if (classParameters) initialize.typeParameters = clone(classParameters);
+            const installation = t.staticBlock(classParameters?.params.length
+              ? [t.expressionStatement(t.callExpression(initialize, []))]
+              : installationBody);
             const hoist = classesWithStaticInitialization.has(classBody.node);
             if (original.returnType || original.typeParameters || original.params.some((p: any) => p.typeAnnotation)) {
               const signatures = overloads.length ? overloads : [original];

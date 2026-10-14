@@ -82,6 +82,24 @@ test("class installations precede existing static initialization", async () => {
   assert.equal(module.Worker.other, 7);
 });
 
+test("class definition side effects retain module function hoisting", async () => {
+  for (const declaration of [
+    "export class Worker { static value = work(); }",
+    "export class Worker { static { this.value = work(); } }",
+    "export class Worker { [work()]() {} }",
+    "export class Worker extends base() {}",
+  ]) {
+    const module = await load(`
+      ${declaration}
+      function helper() { return 7; }
+      export function work() { return helper(); }
+      function base() { work(); return class {}; }
+    `);
+    assert.equal(module.work(), 7);
+    if ("value" in module.Worker) assert.equal(module.Worker.value, 7);
+  }
+});
+
 test("receiver temporaries avoid existing names and nested-scope references", async () => {
   const module = await load(`
     const _receiver = 11;

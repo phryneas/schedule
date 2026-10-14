@@ -163,3 +163,20 @@ export default function last(value: number): number { return second(value); }
   assert.ok(positions.every(p => p >= 0));
   assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
 });
+
+test("ordinary classes do not move surrounding functions", () => {
+  const output = transformSource(`
+function helper(value: number): number { return value; }
+export function first(): number { return helper(1); }
+export class Worker {
+  value = first();
+  constructor() { first(); }
+  static run(): number { return first(); }
+}
+export function last(): number { return helper(2); }
+`, "fixture.ts");
+  const positions = ["function helper", "export var first", "export class Worker", "export var last"]
+    .map(text => output.indexOf(text));
+  assert.ok(positions.every(p => p >= 0));
+  assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
+});

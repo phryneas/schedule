@@ -27,7 +27,10 @@ test("standalone generator overloads preserve published call signatures", async 
     export function pick(x: number | string): number | string { return plain(x); }
 
     export class Picker<A extends object, B, C = string> {
+      static value = 7;
+      static read(): number { return plain(this.value); }
       identity<T>(value: T): T { return plain(value); }
+      less(a: B, b: B): boolean { return plain(a < b); }
       classValue(value: C): C { return plain(value); }
       fluent(): this { return plain(this); }
       pick(x: number): number;
@@ -36,9 +39,8 @@ test("standalone generator overloads preserve published call signatures", async 
     }
   `, "input.ts", { runtimeModule: runtime });
   assert.match(output, /function\* _pickImpl/);
-  assert.match(output, /type A = object;/);
-  assert.match(output, /type B = unknown;/);
-  assert.match(output, /type C = string;/);
+  assert.match(output, /<A extends object, B, C = string>\(\) =>/);
+  assert.doesNotMatch(output, /type [ABC] =/);
   assert.doesNotMatch(output, /function\*<A/);
   assert.doesNotMatch(output, /\bas\s+(?:unknown|any)\b/);
   const source = join(directory, "generated.mts");
@@ -95,6 +97,12 @@ test("standalone generator overloads preserve published call signatures", async 
   compile(["--noEmit", consumer]);
 
   const module = await import(pathToFileURL(source).href);
+  const instance = new module.Picker();
+  assert.equal(instance.fluent(), instance);
+  assert.equal(await async(instance.fluent).call(instance), instance);
+  assert.equal(instance.less(1, 2), true);
+  assert.equal(module.Picker.read(), 7);
+  assert.equal(await async(module.Picker.read).call(module.Picker), 7);
   assert.equal(module.nullable(null), undefined);
   assert.equal(await async(module.nullable)(undefined), undefined);
   assert.equal(await async(module.nullable)("text"), "text");
