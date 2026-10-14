@@ -26,14 +26,19 @@ test("standalone generator overloads preserve published call signatures", async 
     export function pick(x: string): string;
     export function pick(x: number | string): number | string { return plain(x); }
 
-    export class Picker {
+    export class Picker<A extends object, B, C = string> {
       identity<T>(value: T): T { return plain(value); }
+      classValue(value: C): C { return plain(value); }
       pick(x: number): number;
       pick(x: string): string;
       pick(x: number | string): number | string { return plain(x); }
     }
   `, "input.ts", { runtimeModule: runtime });
   assert.match(output, /function\* _pickImpl/);
+  assert.match(output, /type A = object;/);
+  assert.match(output, /type B = unknown;/);
+  assert.match(output, /type C = string;/);
+  assert.doesNotMatch(output, /function\*<A/);
   assert.doesNotMatch(output, /\bas\s+(?:unknown|any)\b/);
   const source = join(directory, "generated.mts");
   await writeFile(source, output);
@@ -72,6 +77,9 @@ test("standalone generator overloads preserve published call signatures", async 
     expectTypeOf(commands.execute(pick)(1)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(commands.execute(pick)("a")).toEqualTypeOf<SchedulableIterable<string>>();
     const receiver = new Picker();
+    const specialized = new Picker<object, boolean, number>();
+    expectTypeOf(specialized.classValue(1)).toEqualTypeOf<number>();
+    expectTypeOf(async(specialized.classValue)(1)).toEqualTypeOf<Promise<number>>();
     expectTypeOf([1, 2, 3].map(receiver.identity)).toEqualTypeOf<number[]>();
     expectTypeOf(commands.execute(receiver.pick).bind(receiver)(1)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(commands.execute(receiver.pick).bind(receiver)("a")).toEqualTypeOf<SchedulableIterable<string>>();

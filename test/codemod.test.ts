@@ -68,6 +68,20 @@ test("hoisting fallback preserves early captures and indirect initialization cal
   assert.equal(await scheduled(module.captured)(4), 4);
 });
 
+test("class installations precede existing static initialization", async () => {
+  const module = await load(`
+    function helper() { return 7; }
+    export class Worker {
+      static initial = new Worker().run();
+      static { this.other = this.work(); }
+      run() { return helper(); }
+      static work() { return helper(); }
+    }
+  `);
+  assert.equal(module.Worker.initial, 7);
+  assert.equal(module.Worker.other, 7);
+});
+
 test("receiver temporaries avoid existing names and nested-scope references", async () => {
   const module = await load(`
     const _receiver = 11;
@@ -80,6 +94,30 @@ test("receiver temporaries avoid existing names and nested-scope references", as
   const getObject = () => ({ value: 7, read() { return this.value; } });
   assert.deepEqual(module.run(getObject), [7, 33, 11, 22]);
   assert.deepEqual(await scheduled(module.run)(getObject), [7, 33, 11, 22]);
+});
+
+test("stable receivers bind directly while getter-mutated bindings keep their receiver", async () => {
+  const stable = transform(`
+    export function run(schema) { return schema.read(); }
+    export function own() { return this.read(); }
+  `);
+  assert.doesNotMatch(stable, /_receiver/);
+  assert.match(stable, /execute\(schema.read\)\.bind\(schema\)/);
+  assert.match(stable, /execute\(this.read\)\.bind\(this\)/);
+  const module = await load(`
+    export function run() {
+      let receiver = {
+        value: 7,
+        get read() {
+          receiver = { value: 99 };
+          return function () { return this.value; };
+        }
+      };
+      return receiver.read();
+    }
+  `);
+  assert.equal(module.run(), 7);
+  assert.equal(await scheduled(module.run)(), 7);
 });
 
 test("optional methods preserve receivers, getter evaluation, and conditional arguments", async () => {

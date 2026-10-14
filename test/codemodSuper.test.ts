@@ -28,6 +28,9 @@ test("super calls select the superclass method and preserve the current receiver
   `, "fixture.ts", { runtimeModule: join(root, "src/index.ts") });
   assert.match(output, /execute\(Base\.prototype\.add\)\.bind\(this\)/);
   assert.match(output, /execute\(Base\.add\)\.bind\(this\)/);
+  assert.doesNotMatch(output, /_makeSchedulable</);
+  assert.match(output, /declare add:/);
+  assert.match(output, /declare static add:/);
   const file = join(directory, "generated.mts");
   await writeFile(file, output);
   const result = spawnSync(join(root, "node_modules/.bin/tsc"), [

@@ -25,6 +25,7 @@ export default function schedulerPlugin(
         const iterable = program.scope.generateUidIdentifier("SchedulableIterable");
         const marker = program.scope.generateUidIdentifier("schedulableImplementationSignal");
         const functions: NodePath<any>[] = [];
+        const classesWithStaticInitialization = new WeakSet<Types.ClassBody>();
         const hoisted = new Map<NodePath<any>, Types.Statement[]>();
         const localCalls = new WeakSet<Types.CallExpression>();
         let used = false;
@@ -77,6 +78,12 @@ export default function schedulerPlugin(
         }
 
         program.traverse({
+          Class(path) {
+            if (path.node.body.body.some(member => t.isStaticBlock(member) ||
+                (t.isClassProperty(member) || t.isClassPrivateProperty(member)) && member.static && member.value)) {
+              classesWithStaticInitialization.add(path.node.body);
+            }
+          },
           CallExpression(path) {
             if (!t.isIdentifier(path.node.callee)) return;
             const binding = path.scope.getBinding(path.node.callee.name);
@@ -305,14 +312,21 @@ export default function schedulerPlugin(
                     else args = node.arguments.slice(1);
                     fn = fn.object as Types.Expression;
                   } else {
-                    const object = path.scope.generateUidIdentifier("receiver");
-                    path.scope.push({ id: clone(object), kind: "let" });
-                    before.push(t.assignmentExpression("=", clone(object), fn.object as Types.Expression));
-                    receiver = clone(object);
-                    hasReceiver = true;
-                    // Keep simple property accesses intact so TypeScript retains narrowing.
-                    if (!t.isIdentifier(fn.object) && !t.isThisExpression(fn.object)) {
-                      fn = t.memberExpression(clone(object), clone(fn.property), fn.computed);
+                    const binding = t.isIdentifier(fn.object) ? call.scope.getBinding(fn.object.name) : undefined;
+                    const stable = t.isThisExpression(fn.object) || binding?.constant && binding.kind !== "module";
+                    if (stable) {
+                      receiver = clone(fn.object as Types.Expression);
+                      hasReceiver = true;
+                    } else {
+                      const object = path.scope.generateUidIdentifier("receiver");
+                      path.scope.push({ id: clone(object), kind: "let" });
+                      before.push(t.assignmentExpression("=", clone(object), fn.object as Types.Expression));
+                      receiver = clone(object);
+                      hasReceiver = true;
+                      // Keep simple property accesses intact so TypeScript retains narrowing.
+                      if (!t.isIdentifier(fn.object) && !t.isThisExpression(fn.object)) {
+                        fn = t.memberExpression(clone(object), clone(fn.property), fn.computed);
+                      }
                     }
                   }
                 }
@@ -454,7 +468,7 @@ export default function schedulerPlugin(
           const generator = t.functionExpression(null, path.node.params, path.node.body, true, false);
           generator.typeParameters = path.node.typeParameters;
           let implementation = original;
-          let implementationOverloads = overloads;
+          const implementations: Types.Statement[] = [];
           if (path.isClassMethod()) {
             const cls = path.parentPath.parentPath!.node as Types.ClassDeclaration;
             if (cls.id && (options.analysis || original.returnType || original.typeParameters || original.params.some((p: any) => p.typeAnnotation))) {
@@ -463,18 +477,16 @@ export default function schedulerPlugin(
               const thisParam = t.identifier("this");
               thisParam.typeAnnotation = t.tsTypeAnnotation(thisType);
               if (!generator.params.some(p => t.isIdentifier(p, { name: "this" }))) generator.params.unshift(thisParam);
-              if (params.length) {
-                const generics = t.tsTypeParameterDeclaration([...params.map(clone), ...((generator.typeParameters as Types.TSTypeParameterDeclaration)?.params ?? [])]);
-                generator.typeParameters = generics;
-                implementation = { ...original, typeParameters: generics };
-                implementationOverloads = overloads.map(o => ({ ...o, typeParameters: t.tsTypeParameterDeclaration([...params.map(clone), ...(o.typeParameters?.params ?? [])]) }));
+              for (const param of params) {
+                implementations.push(t.tsTypeAliasDeclaration(t.identifier(param.name), null,
+                  param.default ? clone(param.default) : param.constraint ? clone(param.constraint) : t.tsUnknownKeyword()));
               }
               implementation = { ...implementation, params: generator.params };
             }
           }
-          const implementations: Types.Statement[] = [];
           const implementationName = path.scope.generateUidIdentifier(`${original.id?.name ?? original.key?.name ?? "function"}Impl`);
-          const wrapped = wrap(generator, implementation, implementationOverloads, implementations, implementationName);
+          const wrapped = wrap(generator, implementation, overloads, implementations, implementationName);
+          if (path.isClassMethod()) wrapped.typeParameters = null;
           for (const overload of overloadPaths) {
             if (overload.parentPath!.isExportNamedDeclaration()) overload.parentPath!.remove();
             else overload.remove();
@@ -520,6 +532,8 @@ export default function schedulerPlugin(
                 t.objectProperty(t.identifier("configurable"), t.booleanLiteral(true)),
               ]),
             ]));
+            const installation = t.staticBlock([...implementations, definition]);
+            const hoist = classesWithStaticInitialization.has(classBody.node);
             if (original.returnType || original.typeParameters || original.params.some((p: any) => p.typeAnnotation)) {
               const signatures = overloads.length ? overloads : [original];
               const property = t.classProperty(clone(method.key));
@@ -527,13 +541,14 @@ export default function schedulerPlugin(
               property.static = method.static;
               property.typeAnnotation = t.tsTypeAnnotation(fullSignature(signatures));
               preserveComments(property, ...commentSources);
-              path.replaceWith(property);
+              path.replaceWithMultiple(hoist ? [property] : [property, installation]);
             } else {
               preserveComments(definition, ...commentSources);
-              path.remove();
+              if (hoist) path.remove();
+              else path.replaceWith(installation);
             }
             // Install prototype methods before static field initializers run.
-            classBody.unshiftContainer("body", t.staticBlock([...implementations, definition]));
+            if (hoist) classBody.unshiftContainer("body", installation);
           } else {
             path.replaceWith(wrapped);
           }

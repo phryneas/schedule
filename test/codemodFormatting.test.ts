@@ -113,6 +113,29 @@ test("comments inside cloned return types are preserved", () => {
   assert.ok(output.includes("/* item type */"));
 });
 
+test("class method declarations and installations stay together in source order", () => {
+  const output = transformSource(`
+function helper(value: number): number { return value; }
+class Worker {
+  before = 1;
+  /** Work docs. */
+  work(value: number): number { return helper(value); }
+  between = 2;
+  static run(value: number): number { return helper(value); }
+  after = 3;
+}
+`, "fixture.ts");
+  const parsed = parseSync(output, { configFile: false, babelrc: false, parserOpts: { plugins: ["typescript"] } })!;
+  const cls = parsed.program.body.find(node => node.type === "ClassDeclaration")!;
+  assert.equal(cls.type, "ClassDeclaration");
+  if (cls.type !== "ClassDeclaration") return;
+  assert.deepEqual(cls.body.body.map(node => node.type), [
+    "ClassProperty", "ClassProperty", "StaticBlock", "ClassProperty", "ClassProperty", "StaticBlock", "ClassProperty",
+  ]);
+  assert.match(output, /declare work:[\s\S]*?static \{\s*Object.defineProperty\(this.prototype, "work"/);
+  assert.match(output, /declare static run:[\s\S]*?static \{\s*Object.defineProperty\(this, "run"/);
+});
+
 test("module functions stay in source order when initialization does not need hoisting", () => {
   const output = transformSource(`
 import { helper } from './helper.ts';
