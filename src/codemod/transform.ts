@@ -441,6 +441,7 @@ export default function schedulerPlugin(
           const info = options.analysis?.functions.get(path.node.end!);
           if (info?.signature) {
             const sig = parseSignature(info.signature);
+            if (!path.node.returnType && sig.typeAnnotation) path.node.returnType = clone(sig.typeAnnotation);
             const params = sig.parameters.filter(p => !t.isIdentifier(p, { name: "this" }));
             path.node.params.forEach((param: any, index: number) => {
               const target = t.isAssignmentPattern(param) ? param.left : param;
