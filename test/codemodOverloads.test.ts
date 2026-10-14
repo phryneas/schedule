@@ -29,6 +29,7 @@ test("standalone generator overloads preserve published call signatures", async 
     export class Picker<A extends object, B, C = string> {
       identity<T>(value: T): T { return plain(value); }
       classValue(value: C): C { return plain(value); }
+      fluent(): this { return plain(this); }
       pick(x: number): number;
       pick(x: string): string;
       pick(x: number | string): number | string { return plain(x); }
@@ -80,6 +81,11 @@ test("standalone generator overloads preserve published call signatures", async 
     const specialized = new Picker<object, boolean, number>();
     expectTypeOf(specialized.classValue(1)).toEqualTypeOf<number>();
     expectTypeOf(async(specialized.classValue)(1)).toEqualTypeOf<Promise<number>>();
+    class Derived extends Picker<object, boolean, number> { extra = 1; }
+    const derived = new Derived();
+    expectTypeOf(derived.fluent()).toEqualTypeOf<Derived>();
+    expectTypeOf(async(derived.fluent)()).toEqualTypeOf<Promise<Derived>>();
+    expectTypeOf(commands.execute(derived.fluent)()).toEqualTypeOf<SchedulableIterable<Derived>>();
     expectTypeOf([1, 2, 3].map(receiver.identity)).toEqualTypeOf<number[]>();
     expectTypeOf(commands.execute(receiver.pick).bind(receiver)(1)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(commands.execute(receiver.pick).bind(receiver)("a")).toEqualTypeOf<SchedulableIterable<string>>();

@@ -113,6 +113,18 @@ test("comments inside cloned return types are preserved", () => {
   assert.ok(output.includes("/* item type */"));
 });
 
+test("class implementations replace polymorphic this types with a local alias", () => {
+  const output = transformSource(`
+function helper<T>(value: T): T { return value; }
+class Store<T, V> {
+  set(value: V): this { return helper(this); }
+}
+`, "fixture.ts");
+  assert.match(output, /type This = Store<T, V>;/);
+  assert.match(output, /function\*\(this: Store<T, V>, value: V\): _SchedulableIterable<This>/);
+  assert.doesNotMatch(output, /function\*[^{}]*_SchedulableIterable<this>/);
+});
+
 test("class method declarations and installations stay together in source order", () => {
   const output = transformSource(`
 function helper(value: number): number { return value; }

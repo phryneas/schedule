@@ -1,4 +1,4 @@
-import { parseSync } from "@babel/core";
+import { parseSync, traverse } from "@babel/core";
 import type { NodePath, PluginObj } from "@babel/core";
 import type * as Types from "@babel/types";
 import type { SourceAnalysis } from "./analyze.ts";
@@ -25,6 +25,7 @@ export default function schedulerPlugin(
         const iterable = program.scope.generateUidIdentifier("SchedulableIterable");
         const marker = program.scope.generateUidIdentifier("schedulableImplementationSignal");
         const functions: NodePath<any>[] = [];
+        const signatureNamespaces = new Map<NodePath<any>, Types.TSInterfaceDeclaration[]>();
         const classesWithStaticInitialization = new WeakSet<Types.ClassBody>();
         const hoisted = new Map<NodePath<any>, Types.Statement[]>();
         const localCalls = new WeakSet<Types.CallExpression>();
@@ -468,12 +469,14 @@ export default function schedulerPlugin(
           const generator = t.functionExpression(null, path.node.params, path.node.body, true, false);
           generator.typeParameters = path.node.typeParameters;
           let implementation = original;
+          let implementationThisType: Types.TSType | undefined;
           const implementations: Types.Statement[] = [];
           if (path.isClassMethod()) {
             const cls = path.parentPath.parentPath!.node as Types.ClassDeclaration;
             if (cls.id && (options.analysis || original.returnType || original.typeParameters || original.params.some((p: any) => p.typeAnnotation))) {
               const params = (cls.typeParameters as Types.TSTypeParameterDeclaration)?.params ?? [];
               const thisType = path.node.static ? t.tsTypeQuery(clone(cls.id)) : t.tsTypeReference(clone(cls.id), params.length ? t.tsTypeParameterInstantiation(params.map(p => t.tsTypeReference(t.identifier(p.name)))) : null);
+              implementationThisType = thisType;
               const thisParam = t.identifier("this");
               thisParam.typeAnnotation = t.tsTypeAnnotation(thisType);
               if (!generator.params.some(p => t.isIdentifier(p, { name: "this" }))) generator.params.unshift(thisParam);
@@ -487,6 +490,27 @@ export default function schedulerPlugin(
           const implementationName = path.scope.generateUidIdentifier(`${original.id?.name ?? original.key?.name ?? "function"}Impl`);
           const wrapped = wrap(generator, implementation, overloads, implementations, implementationName);
           if (path.isClassMethod()) wrapped.typeParameters = null;
+          if (implementationThisType) {
+            const names = new Set<string>();
+            const generated = t.file(t.program([...implementations, t.expressionStatement(wrapped)]));
+            t.traverseFast(generated, node => {
+              if (t.isIdentifier(node)) names.add(node.name);
+              if (t.isTSTypeParameter(node)) names.add(node.name);
+            });
+            let name = "This";
+            for (let suffix = 2; names.has(name); suffix++) name = `This${suffix}`;
+            let replaced = false;
+            traverse(generated, {
+              noScope: true,
+              Class(inner) { inner.skip(); },
+              TSInterfaceDeclaration(inner) { inner.skip(); },
+              TSThisType(inner) {
+                inner.replaceWith(t.tsTypeReference(t.identifier(name)));
+                replaced = true;
+              },
+            });
+            if (replaced) implementations.push(t.tsTypeAliasDeclaration(t.identifier(name), null, clone(implementationThisType)));
+          }
           for (const overload of overloadPaths) {
             if (overload.parentPath!.isExportNamedDeclaration()) overload.parentPath!.remove();
             else overload.remove();
@@ -539,7 +563,40 @@ export default function schedulerPlugin(
               const property = t.classProperty(clone(method.key));
               property.declare = true;
               property.static = method.static;
-              property.typeAnnotation = t.tsTypeAnnotation(fullSignature(signatures));
+              const signature = fullSignature(signatures);
+              let hasThisType = false;
+              const names = new Set<string>();
+              t.traverseFast(signature, node => {
+                if (t.isTSThisType(node)) hasThisType = true;
+                if (t.isIdentifier(node)) names.add(node.name);
+                if (t.isTSTypeParameter(node)) names.add(node.name);
+              });
+              if (hasThisType) {
+                const cls = classBody.parentPath as NodePath<Types.ClassDeclaration>;
+                if (!cls.isClassDeclaration() || !cls.node.id) {
+                  throw path.buildCodeFrameError("Polymorphic this signatures require a named class declaration.");
+                }
+                const params = (cls.node.typeParameters as Types.TSTypeParameterDeclaration)?.params ?? [];
+                for (const param of params) names.add(param.name);
+                let self = "This";
+                for (let suffix = 2; names.has(self); suffix++) self = `This${suffix}`;
+                traverse(t.file(t.program([t.tsTypeAliasDeclaration(t.identifier("Signature"), null, signature)])), {
+                  noScope: true,
+                  TSThisType(inner) { inner.replaceWith(t.tsTypeReference(t.identifier(self))); },
+                });
+                const methodName = t.isIdentifier(method.key) ? clone(method.key) : path.scope.generateUidIdentifier("method");
+                const iface = t.tsInterfaceDeclaration(methodName,
+                  t.tsTypeParameterDeclaration([t.tsTypeParameter(null, null, self), ...params.map(clone)]),
+                  [], t.tsInterfaceBody(signature.members));
+                const interfaces = signatureNamespaces.get(cls) ?? [];
+                interfaces.unshift(iface);
+                signatureNamespaces.set(cls, interfaces);
+                property.typeAnnotation = t.tsTypeAnnotation(t.tsTypeReference(
+                  t.tsQualifiedName(t.tsQualifiedName(clone(cls.node.id), t.identifier("Signatures")), clone(methodName)),
+                  t.tsTypeParameterInstantiation([t.tsThisType(), ...params.map(param => t.tsTypeReference(t.identifier(param.name)))])));
+              } else {
+                property.typeAnnotation = t.tsTypeAnnotation(signature);
+              }
               preserveComments(property, ...commentSources);
               path.replaceWithMultiple(hoist ? [property] : [property, installation]);
             } else {
@@ -552,6 +609,16 @@ export default function schedulerPlugin(
           } else {
             path.replaceWith(wrapped);
           }
+        }
+
+        for (const [cls, interfaces] of signatureNamespaces) {
+          const signatures = t.tsModuleDeclaration(t.identifier("Signatures"), t.tsModuleBlock(interfaces));
+          signatures.kind = "namespace";
+          const namespace = t.tsModuleDeclaration(clone(cls.node.id), t.tsModuleBlock([signatures]));
+          namespace.kind = "namespace";
+          namespace.declare = true;
+          if (cls.parentPath!.isExportNamedDeclaration()) cls.parentPath!.insertBefore(t.exportNamedDeclaration(namespace));
+          else cls.insertBefore(namespace);
         }
 
         for (const [container, declarations] of hoisted) {
