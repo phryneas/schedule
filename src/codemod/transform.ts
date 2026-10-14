@@ -24,13 +24,15 @@ export default function schedulerPlugin(
         const commands = program.scope.generateUidIdentifier("commands");
         const iterable = program.scope.generateUidIdentifier("SchedulableIterable");
         const marker = program.scope.generateUidIdentifier("schedulableImplementationSignal");
+        const methodType = program.scope.generateUidIdentifier("SchedulableMethod");
         const functions: NodePath<any>[] = [];
-        const signatureNamespaces = new Map<NodePath<any>, Types.TSInterfaceDeclaration[]>();
+        const signatureNamespaces = new Map<NodePath<any>, Types.Statement[]>();
         const classesWithStaticInitialization = new WeakSet<Types.ClassBody>();
         const hoisted = new Map<NodePath<any>, Types.Statement[]>();
         const localCalls = new WeakSet<Types.CallExpression>();
         let used = false;
         let usedTypes = false;
+        let usedMethodType = false;
         function clone<T extends Types.Node>(node: T): T {
           const copy = t.cloneNode(node, true);
           const originals: any[] = [];
@@ -573,39 +575,88 @@ export default function schedulerPlugin(
               const property = t.classProperty(clone(method.key));
               property.declare = true;
               property.static = method.static;
-              const signature = fullSignature(signatures);
+              const shape = fullSignature(signatures);
+              const complex = overloads.length > 0 || signatures.some(node => node.typeParameters?.params.length);
               let hasThisType = false;
               const names = new Set<string>();
-              t.traverseFast(signature, node => {
+              t.traverseFast(shape, node => {
                 if (t.isTSThisType(node)) hasThisType = true;
                 if (t.isIdentifier(node)) names.add(node.name);
                 if (t.isTSTypeParameter(node)) names.add(node.name);
               });
-              if (hasThisType) {
+              const simpleType = (sig: Types.TSCallSignatureDeclaration) => {
+                usedMethodType = true;
+                return t.tsTypeReference(clone(methodType), t.tsTypeParameterInstantiation([
+                  t.tsFunctionType(sig.typeParameters, sig.parameters, sig.typeAnnotation),
+                ]));
+              };
+              if (complex || hasThisType) {
                 const cls = classBody.parentPath as NodePath<Types.ClassDeclaration>;
                 if (!cls.isClassDeclaration() || !cls.node.id) {
-                  throw path.buildCodeFrameError("Polymorphic this signatures require a named class declaration.");
+                  throw path.buildCodeFrameError("Generic, overloaded, and polymorphic this method signatures require a named class declaration.");
                 }
-                const params = (cls.node.typeParameters as Types.TSTypeParameterDeclaration)?.params ?? [];
+                const params = method.static ? [] : (cls.node.typeParameters as Types.TSTypeParameterDeclaration)?.params ?? [];
                 for (const param of params) names.add(param.name);
                 let self = "This";
                 for (let suffix = 2; names.has(self); suffix++) self = `This${suffix}`;
-                traverse(t.file(t.program([t.tsTypeAliasDeclaration(t.identifier("Signature"), null, signature)])), {
-                  noScope: true,
-                  TSThisType(inner) { inner.replaceWith(t.tsTypeReference(t.identifier(self))); },
-                });
-                const methodName = t.isIdentifier(method.key) ? clone(method.key) : path.scope.generateUidIdentifier("method");
-                const iface = t.tsInterfaceDeclaration(methodName,
-                  t.tsTypeParameterDeclaration([t.tsTypeParameter(null, null, self), ...params.map(clone)]),
-                  [], t.tsInterfaceBody(signature.members));
-                const interfaces = signatureNamespaces.get(cls) ?? [];
-                interfaces.unshift(iface);
-                signatureNamespaces.set(cls, interfaces);
+                if (hasThisType) {
+                  traverse(t.file(t.program([t.tsTypeAliasDeclaration(t.identifier("Signature"), null, shape)])), {
+                    noScope: true,
+                    TSThisType(inner) { inner.replaceWith(t.tsTypeReference(t.identifier(self))); },
+                  });
+                }
+                const reservedTypeNames = new Set(["any", "unknown", "never", "number", "string", "boolean", "bigint", "symbol", "object", "undefined", "void", "intrinsic"]);
+                const methodName = t.isIdentifier(method.key) && !method.static
+                  && t.isValidIdentifier(method.key.name) && !reservedTypeNames.has(method.key.name)
+                  ? clone(method.key) : path.scope.generateUidIdentifier(t.isIdentifier(method.key) ? method.key.name : "method");
+                const typeParams = [...(hasThisType ? [t.tsTypeParameter(null, null, self)] : []), ...params.map(clone)];
+                const declarationParams = () => typeParams.length ? t.tsTypeParameterDeclaration(typeParams.map(clone)) : null;
+                const argumentsFor = () => typeParams.length ? t.tsTypeParameterInstantiation(typeParams.map(param => t.tsTypeReference(t.identifier(param.name)))) : null;
+                const reference = (name: Types.Identifier) => t.tsTypeReference(clone(name), argumentsFor());
+                const declarations: Types.Statement[] = [];
+                const calls = shape.members.filter(t.isTSCallSignatureDeclaration);
+                if (!complex) {
+                  declarations.push(t.tsTypeAliasDeclaration(clone(methodName), declarationParams(), simpleType(calls[0]!)));
+                } else {
+                  const syncName = program.scope.generateUidIdentifier(`${methodName.name}Sync`);
+                  const generatorName = program.scope.generateUidIdentifier(`${methodName.name}Generator`);
+                  const implementationName = program.scope.generateUidIdentifier(`${methodName.name}Implementation`);
+                  const markerProperty = shape.members.find(t.isTSPropertySignature)!;
+                  const markerShape = markerProperty.typeAnnotation!.typeAnnotation as Types.TSTypeLiteral;
+                  const methods = (callSignatures: Types.TSCallSignatureDeclaration[], name: string, optional = false) =>
+                    callSignatures.map(sig => {
+                      const method = t.tsMethodSignature(t.identifier(name), sig.typeParameters ? clone(sig.typeParameters) : null, sig.parameters.map(clone), sig.typeAnnotation ? clone(sig.typeAnnotation) : null);
+                      method.optional = optional;
+                      return method;
+                    });
+                  const methodAlias = (name: Types.Identifier, callSignatures: Types.TSCallSignatureDeclaration[]) =>
+                    t.tsTypeAliasDeclaration(clone(name), declarationParams(), t.tsIndexedAccessType(
+                      t.tsTypeLiteral(methods(callSignatures, "invoke")), t.tsLiteralType(t.stringLiteral("invoke"))));
+                  declarations.push(methodAlias(syncName, calls));
+                  declarations.push(methodAlias(generatorName, markerShape.members.filter(t.isTSCallSignatureDeclaration)));
+                  const metadata = markerShape.members.filter(t.isTSPropertySignature).flatMap(property => {
+                    const type = property.typeAnnotation!.typeAnnotation;
+                    const signatures = t.isTSFunctionType(type)
+                      ? [t.tsCallSignatureDeclaration(type.typeParameters, type.parameters, type.typeAnnotation)]
+                      : (type as Types.TSTypeLiteral).members as Types.TSCallSignatureDeclaration[];
+                    return methods(signatures, (property.key as Types.Identifier).name, true);
+                  });
+                  declarations.push(t.tsInterfaceDeclaration(clone(implementationName), declarationParams(),
+                    [t.tsExpressionWithTypeArguments(clone(generatorName), argumentsFor())], t.tsInterfaceBody(metadata)));
+                  const markerMember = t.tsPropertySignature(clone(marker), t.tsTypeAnnotation(reference(implementationName)));
+                  markerMember.computed = true;
+                  declarations.push(t.tsInterfaceDeclaration(clone(methodName), declarationParams(),
+                    [t.tsExpressionWithTypeArguments(clone(syncName), argumentsFor())], t.tsInterfaceBody([markerMember])));
+                }
+                const existing = signatureNamespaces.get(cls) ?? [];
+                existing.unshift(...declarations);
+                signatureNamespaces.set(cls, existing);
+                const args = [...(hasThisType ? [t.tsThisType()] : []), ...params.map(param => t.tsTypeReference(t.identifier(param.name)))];
                 property.typeAnnotation = t.tsTypeAnnotation(t.tsTypeReference(
                   t.tsQualifiedName(t.tsQualifiedName(clone(cls.node.id), t.identifier("Signatures")), clone(methodName)),
-                  t.tsTypeParameterInstantiation([t.tsThisType(), ...params.map(param => t.tsTypeReference(t.identifier(param.name)))])));
+                  args.length ? t.tsTypeParameterInstantiation(args) : null));
               } else {
-                property.typeAnnotation = t.tsTypeAnnotation(signature);
+                property.typeAnnotation = t.tsTypeAnnotation(simpleType(shape.members[0] as Types.TSCallSignatureDeclaration));
               }
               preserveComments(property, ...commentSources);
               path.replaceWithMultiple(hoist ? [property] : [property, installation]);
@@ -644,6 +695,7 @@ export default function schedulerPlugin(
           const declaration = t.importDeclaration([
             t.importSpecifier(clone(iterable), t.identifier("SchedulableIterable")),
             t.importSpecifier(clone(marker), t.identifier("schedulableImplementationSignal")),
+            ...(usedMethodType ? [t.importSpecifier(clone(methodType), t.identifier("SchedulableMethod"))] : []),
           ], t.stringLiteral(options.runtimeModule ?? "@phryneas/schedule"));
           declaration.importKind = "type";
           program.unshiftContainer("body", declaration);

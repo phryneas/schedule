@@ -30,8 +30,12 @@ test("standalone generator overloads preserve published call signatures", async 
       static value = 7;
       static read(): number { return plain(this.value); }
       identity<T>(value: T): T { return plain(value); }
+      any<T>(value: T): T { return plain(value); }
       less(a: B, b: B): boolean { return plain(a < b); }
       classValue(value: C): C { return plain(value); }
+      store(value: C): C;
+      store(value: C, fallback: C): C;
+      store(value: C, fallback?: C): C { return plain(value); }
       fluent(): this { return plain(this); }
       pick(x: number): number;
       pick(x: string): string;
@@ -43,6 +47,9 @@ test("standalone generator overloads preserve published call signatures", async 
   assert.doesNotMatch(output, /type [ABC] =/);
   assert.doesNotMatch(output, /function\*<A/);
   assert.doesNotMatch(output, /\bas\s+(?:unknown|any)\b/);
+  assert.match(output, /declare classValue: _SchedulableMethod</);
+  assert.match(output, /namespace Signatures/);
+  assert.match(output, /interface identity<[^]*?extends _identitySync/);
   const source = join(directory, "generated.mts");
   await writeFile(source, output);
 
@@ -89,6 +96,13 @@ test("standalone generator overloads preserve published call signatures", async 
     expectTypeOf(async(derived.fluent)()).toEqualTypeOf<Promise<Derived>>();
     expectTypeOf(commands.execute(derived.fluent)()).toEqualTypeOf<SchedulableIterable<Derived>>();
     expectTypeOf([1, 2, 3].map(receiver.identity)).toEqualTypeOf<number[]>();
+    expectTypeOf([1, 2, 3].map(receiver.any)).toEqualTypeOf<number[]>();
+    expectTypeOf([1, 2, 3].map(commands.execute(receiver.identity))).toEqualTypeOf<SchedulableIterable<number>[]>();
+    declare const mutablePicker: Picker<object, boolean, Map<string, number>>;
+    const readonlyPicker: Picker<object, boolean, ReadonlyMap<string, number>> = mutablePicker;
+    expectTypeOf(specialized.store(1)).toEqualTypeOf<number>();
+    expectTypeOf(async(specialized.store)(1, 2)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(commands.execute(specialized.store)(1, 2)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(commands.execute(receiver.pick).bind(receiver)(1)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(commands.execute(receiver.pick).bind(receiver)("a")).toEqualTypeOf<SchedulableIterable<string>>();
     // @ts-expect-error Invalid arguments must still be rejected.
