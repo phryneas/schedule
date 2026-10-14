@@ -55,6 +55,18 @@ test("plugin preserves method receivers and evaluates receiver expressions once"
   assert.equal(Object.hasOwn(new module.Counter(), "run"), false);
 });
 
+test("hoisting fallback preserves early captures and indirect initialization calls", async () => {
+  const module = await load(`
+    export const captured = work;
+    export const initial = start();
+    function start() { return work(3); }
+    export function work(value) { return Number(value); }
+  `);
+  assert.equal(module.captured, module.work);
+  assert.equal(module.initial, 3);
+  assert.equal(await scheduled(module.captured)(4), 4);
+});
+
 test("receiver temporaries avoid existing names and nested-scope references", async () => {
   const module = await load(`
     const _receiver = 11;

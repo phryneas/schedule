@@ -31,12 +31,6 @@ export function transformSource(
     plugins: [[schedulerTransform, { ...options, analysis }]],
   });
   types.visit(ast, {
-    visitTemplateLiteral(path) {
-      // Reprint literal contents without reindenting their significant whitespace.
-      Object.defineProperty(path.node, "original", { value: null });
-      for (const quasi of path.node.quasis) Object.defineProperty(quasi, "original", { value: null });
-      this.traverse(path);
-    },
     visitYieldExpression(path) {
       // Preserve yield precedence when Recast reuses a surrounding type assertion.
       if (path.parentPath.node.type === "TSAsExpression" || path.parentPath.node.type === "TSSatisfiesExpression") {

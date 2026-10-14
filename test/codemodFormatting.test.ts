@@ -66,6 +66,13 @@ test("printing preserves template whitespace and yield precedence in type assert
   assert.ok(parseSync(output, { configFile: false, babelrc: false, parserOpts: { plugins: ["typescript"] } }));
 });
 
+test("templates in untouched functions do not trigger reformatting", () => {
+  const untouched = 'export function rule(\n  context: Context,\n): Visitor {\n  return {\n    Field(node) {\n      context.report(\n        `Cannot query "${node.name}".` +\n          suggestion,\n      );\n    },\n  };\n}\n';
+  assert.equal(transformSource(untouched, "fixture.ts"), untouched);
+  const output = transformSource(`${untouched}\n/** Work docs. */\nfunction work() { return helper(); }\n/** Helper docs. */\nfunction helper() { return Number(1); }\n`, "fixture.ts");
+  assert.ok(output.includes(untouched));
+});
+
 test("function and method documentation survives replacement and hoisting", () => {
   const comments = [
     "/** Exported docs.\n * @param value - The input.\n * @example work(1);\n */",
@@ -104,4 +111,20 @@ test("comments inside cloned return types are preserved", () => {
     }
   `, "fixture.ts");
   assert.ok(output.includes("/* item type */"));
+});
+
+test("module functions stay in source order when initialization does not need hoisting", () => {
+  const output = transformSource(`
+import { helper } from './helper.ts';
+export const settings = { values: [1, 2] };
+export function first(value: number): number { return helper(value); }
+/** Between the functions. */
+export type Value = number;
+function second(value: number): number { return first(value); }
+export default function last(value: number): number { return second(value); }
+`, "fixture.ts");
+  const positions = ["import { helper }", "export const settings", "export var first", "export type Value", "var second", "var last"]
+    .map(text => output.indexOf(text));
+  assert.ok(positions.every(p => p >= 0));
+  assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
 });

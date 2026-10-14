@@ -131,6 +131,28 @@ export default function schedulerPlugin(
           },
         });
 
+        // Keep declarations in place unless module initialization may execute code
+        // or capture a function before its wrapper has been initialized. Deliberately
+        // conservative: do not try to follow indirect calls or getter side effects.
+        const wrappedNames = new Set(functions.filter(p => p.isFunctionDeclaration()).map(p => p.node.id?.name));
+        function passive(node: Types.Node | null | undefined): boolean {
+          if (!node || t.isLiteral(node) && !t.isTemplateLiteral(node) || t.isFunction(node)) return true;
+          if (t.isIdentifier(node)) return !wrappedNames.has(node.name);
+          if (t.isArrayExpression(node)) return node.elements.every(passive);
+          if (t.isObjectExpression(node)) return node.properties.every(p =>
+            (t.isObjectMethod(p) && !p.computed) ||
+            (t.isObjectProperty(p) && !p.computed && passive(p.value)));
+          return false;
+        }
+        const needsHoisting = program.node.body.some(statement => {
+          const node = t.isExportDeclaration(statement) && "declaration" in statement ? statement.declaration : statement;
+          if (!node || t.isImportDeclaration(node) || t.isExportNamedDeclaration(node) ||
+              t.isExportAllDeclaration(node) || t.isFunctionDeclaration(node) ||
+              t.isTSDeclareFunction(node) || t.isTSInterfaceDeclaration(node) || t.isTSTypeAliasDeclaration(node)) return false;
+          if (t.isVariableDeclaration(node)) return node.declarations.some(d => !t.isIdentifier(d.id) || !passive(d.init));
+          return true;
+        });
+
         function resultType(node: any): Types.TSType {
           const annotation = node.returnType?.typeAnnotation;
           return annotation && t.isTSTypePredicate(annotation)
@@ -350,6 +372,13 @@ export default function schedulerPlugin(
           const commentSources = [...overloadPaths, path].flatMap(p =>
             p.parentPath!.isExportDeclaration() ? [p.parentPath!.node, p.node] : [p.node]);
           transformCalls(path);
+          // Moving this body can change indentation. Reprint its template contents
+          // verbatim, but leave templates in untouched functions alone.
+          t.traverseFast(path.node.body, node => {
+            if (!t.isTemplateLiteral(node)) return;
+            Object.defineProperty(node, "original", { value: null });
+            for (const quasi of node.quasis) Object.defineProperty(quasi, "original", { value: null });
+          });
           const generator = t.functionExpression(null, path.node.params, path.node.body, true, false);
           generator.typeParameters = path.node.typeParameters;
           let implementation = original;
@@ -386,12 +415,21 @@ export default function schedulerPlugin(
             const container = statement.parentPath!;
             const declaration = t.variableDeclaration("var", [t.variableDeclarator(clone(name), wrapped)]);
             preserveComments(declaration, ...commentSources);
-            const list = hoisted.get(container) ?? [];
-            list.unshift(...implementations, declaration);
-            hoisted.set(container, list);
-            if (statement.isExportDefaultDeclaration()) statement.replaceWith(t.exportNamedDeclaration(null, [t.exportSpecifier(clone(name), t.identifier("default"))]));
-            else if (statement.isExportNamedDeclaration()) statement.replaceWith(t.exportNamedDeclaration(null, [t.exportSpecifier(clone(name), clone(name))]));
-            else statement.remove();
+            // The comments move with the declaration. Do not let Babel also
+            // attach them to an untouched neighboring statement when removing it.
+            t.removeComments(statement.node);
+            if (needsHoisting) {
+              const list = hoisted.get(container) ?? [];
+              list.unshift(...implementations, declaration);
+              hoisted.set(container, list);
+              if (statement.isExportDefaultDeclaration()) statement.replaceWith(t.exportNamedDeclaration(null, [t.exportSpecifier(clone(name), t.identifier("default"))]));
+              else if (statement.isExportNamedDeclaration()) statement.replaceWith(t.exportNamedDeclaration(null, [t.exportSpecifier(clone(name), clone(name))]));
+              else statement.remove();
+            } else if (statement.isExportDefaultDeclaration()) {
+              statement.replaceWithMultiple([...implementations, declaration, t.exportNamedDeclaration(null, [t.exportSpecifier(clone(name), t.identifier("default"))])]);
+            } else {
+              statement.replaceWithMultiple([...implementations, statement.isExportNamedDeclaration() ? t.exportNamedDeclaration(declaration) : declaration]);
+            }
           } else if (path.isObjectMethod()) {
             path.replaceWith(t.objectProperty(clone(path.node.key), wrapped, path.node.computed));
           } else if (path.isClassMethod()) {
