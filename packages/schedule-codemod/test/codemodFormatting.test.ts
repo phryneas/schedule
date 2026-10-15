@@ -3,6 +3,22 @@ import test from "node:test";
 import { transformSource } from "../src/index.ts";
 import { parseSync } from "@babel/core";
 
+test("type import resolution mode is opt-in and does not affect runtime imports", () => {
+  const source = `
+    function helper(value: number) { return value; }
+    export function work(value: number): number { return helper(value); }
+  `;
+  assert.doesNotMatch(transformSource(source, "fixture.ts"), /resolution-mode/);
+  for (const mode of ["import", "require"] as const) {
+    const output = transformSource(source, "fixture.ts", { typeImportResolutionMode: mode });
+    const ast = parseSync(output, { configFile: false, babelrc: false, parserOpts: { plugins: ["typescript"] } })!;
+    const imports = ast.program.body.filter(node => node.type === "ImportDeclaration");
+    const typeImport = imports.find(node => node.importKind === "type")!;
+    assert.equal(typeImport.attributes?.[0]?.value.value, mode);
+    assert.equal(imports.find(node => node.importKind !== "type")!.attributes?.length ?? 0, 0);
+  }
+});
+
 test("files with no transformed functions retain their exact formatting", () => {
   const source = `// A deliberately spaced declaration.
 export const settings = {

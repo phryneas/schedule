@@ -7,7 +7,8 @@ import test from "node:test";
 import { transformSource } from "../src/index.ts";
 import { async, commands, makeSchedulable } from "../../schedule/src/index.ts";
 
-test("standalone generator overloads preserve published call signatures", async t => {
+for (const mode of [undefined, "import"] as const) {
+test(`standalone generator overloads preserve published call signatures (${mode ?? "default"})`, async t => {
   const root = resolve("../..");
   await mkdir(join(root, ".tmp"), { recursive: true });
   const directory = await mkdtemp(join(root, ".tmp/overloads-"));
@@ -15,7 +16,16 @@ test("standalone generator overloads preserve published call signatures", async 
   const runtime = join(root, "packages/schedule/src/index.ts");
   const output = transformSource(`
     function plain<T>(value: T): T { return value; }
+    ${mode ? `
+    type Handler = (this: { base: number }, value?: number) => number;
+    export const annotated: Handler = function(this: { base: number }, value: number = 1): number {
+      return plain(this.base + value);
+    };
+    ` : ""}
     export function simple(value: number): number { return plain(value); }
+    export function withArgs(this: { base: number }, value: number = 1, ...rest: number[]): number {
+      return plain(this.base + value + rest.length);
+    }
     export function identity<T>(value: T): T { return plain(value); }
     export function nullable(value: null | undefined): void;
     export function nullable(value: string): string;
@@ -23,7 +33,9 @@ test("standalone generator overloads preserve published call signatures", async 
     export function nullable(value: string | null | undefined): string | undefined {
       if (value) return plain(value);
     }
+    /** Pick a number. */
     export function pick(x: number): number;
+    /** Pick a string. */
     export function pick(x: string): string;
     export function pick(x: number | string): number | string { return plain(x); }
 
@@ -42,9 +54,12 @@ test("standalone generator overloads preserve published call signatures", async 
       pick(x: string): string;
       pick(x: number | string): number | string { return plain(x); }
     }
-  `, "input.ts", { runtimeModule: runtime });
+  `, "input.ts", { runtimeModule: runtime, ...(mode ? { typeImportResolutionMode: mode } : {}) });
   assert.match(output, /function\* _pickImpl/);
-  assert.match(output, /simple = _makeSchedulable\(\s*function\*/);
+  assert.doesNotMatch(output, /export\s*\/\*\*/);
+  if (mode) assert.match(output, /simple: _SchedulableFunction<number, \[value: number\], unknown> = _makeSchedulable/);
+  else assert.match(output, /simple = _makeSchedulable\(\s*function\*/);
+  if (mode) assert.match(output, /_SchedulableFunction<ReturnType<Handler>, Parameters<Handler>, ThisParameterType<Handler>>/);
   assert.match(output, /pick = _makeSchedulable</);
   assert.match(output, /identity = _makeSchedulable</);
   assert.match(output, /<A extends object, B, C = string>\(\) =>/);
@@ -71,12 +86,27 @@ test("standalone generator overloads preserve published call signatures", async 
   const consumer = join(directory, "consumer.mts");
   await writeFile(consumer, `
     import { expectTypeOf } from "expect-type";
-    import { simple, identity, nullable, pick, Picker } from ${JSON.stringify(declaration.replace(/\.d\.mts$/, ".mjs"))};
+    import { simple, withArgs, identity, nullable, pick, Picker } from ${JSON.stringify(declaration.replace(/\.d\.mts$/, ".mjs"))};
     import { async, commands, makeSchedulable } from ${JSON.stringify(runtime)};
     import type { SchedulableIterable } from ${JSON.stringify(runtime)};
+    ${mode ? `
+    import { annotated } from ${JSON.stringify(declaration.replace(/\.d\.mts$/, ".mjs"))};
+    expectTypeOf(annotated.call({ base: 1 })).toEqualTypeOf<number>();
+    expectTypeOf(async(annotated).call({ base: 1 }, 2)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(commands.execute(annotated).call({ base: 1 })).toEqualTypeOf<SchedulableIterable<number>>();
+    // @ts-expect-error Preserve the annotated receiver.
+    annotated.call({ base: "wrong" });
+    ` : ""}
     expectTypeOf(simple(1)).toEqualTypeOf<number>();
     expectTypeOf(async(simple)(1)).toEqualTypeOf<Promise<number>>();
     expectTypeOf(commands.execute(simple)(1)).toEqualTypeOf<SchedulableIterable<number>>();
+    expectTypeOf(withArgs.call({ base: 1 })).toEqualTypeOf<number>();
+    expectTypeOf(async(withArgs).call({ base: 1 }, 2, 3)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(commands.execute(withArgs).call({ base: 1 }, 2, 3)).toEqualTypeOf<SchedulableIterable<number>>();
+    // @ts-expect-error Preserve the explicit receiver.
+    withArgs.call({ base: "wrong" });
+    // @ts-expect-error Preserve the rest parameter's element type.
+    withArgs.call({ base: 1 }, 2, "wrong");
     expectTypeOf([1, 2, 3].map(identity)).toEqualTypeOf<number[]>();
     expectTypeOf(async(identity)(42)).toEqualTypeOf<Promise<number>>();
     expectTypeOf(nullable(null)).toEqualTypeOf<void>();
@@ -135,3 +165,4 @@ test("standalone generator overloads preserve published call signatures", async 
   assert.equal(work(), 42);
   assert.equal(await async(work)(), 42);
 });
+}

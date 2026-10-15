@@ -6,6 +6,7 @@ import type { SourceAnalysis } from "./analyze.ts";
 export interface SchedulerPluginOptions {
   /** Import path for the scheduler runtime. */
   runtimeModule?: string;
+  typeImportResolutionMode?: "import" | "require";
   analysis?: SourceAnalysis;
 }
 
@@ -25,6 +26,7 @@ export default function schedulerPlugin(
         const iterable = program.scope.generateUidIdentifier("SchedulableIterable");
         const marker = program.scope.generateUidIdentifier("schedulableImplementationSignal");
         const methodType = program.scope.generateUidIdentifier("SchedulableMethod");
+        const functionType = program.scope.generateUidIdentifier("SchedulableFunction");
         const functions: NodePath<any>[] = [];
         const signatureNamespaces = new Map<NodePath<any>, Types.Statement[]>();
         const classesWithStaticInitialization = new WeakSet<Types.ClassBody>();
@@ -33,6 +35,7 @@ export default function schedulerPlugin(
         let used = false;
         let usedTypes = false;
         let usedMethodType = false;
+        let usedFunctionType = false;
         function clone<T extends Types.Node>(node: T): T {
           const copy = t.cloneNode(node, true);
           const originals: any[] = [];
@@ -223,6 +226,35 @@ export default function schedulerPlugin(
             const sig = signature(node, mode);
             return t.tsCallSignatureDeclaration(sig.typeParameters, sig.parameters, sig.typeAnnotation);
           }));
+        }
+
+        function simpleFunctionType(node: any, existingType?: Types.TSType) {
+          usedTypes = usedFunctionType = true;
+          if (existingType) {
+            return t.tsTypeReference(clone(functionType), t.tsTypeParameterInstantiation(
+              ["ReturnType", "Parameters", "ThisParameterType"].map(name =>
+                t.tsTypeReference(t.identifier(name), t.tsTypeParameterInstantiation([clone(existingType)]))),
+            ));
+          }
+          const sig = signature(node, "sync");
+          let receiver: Types.TSType = t.tsUnknownKeyword();
+          const args: Array<Types.TSType | Types.TSNamedTupleMember> = [];
+          for (const param of sig.parameters) {
+            const annotation = (param.typeAnnotation as Types.TSTypeAnnotation | null)?.typeAnnotation ?? t.tsAnyKeyword();
+            if (t.isIdentifier(param) && param.name === "this") {
+              receiver = clone(annotation);
+              continue;
+            }
+            if (t.isRestElement(param)) args.push(t.tsRestType(clone(annotation)));
+            else args.push(t.tsNamedTupleMember(
+              t.isIdentifier(param) ? t.identifier(param.name) : t.identifier(`arg${args.length}`),
+              clone(annotation),
+              !!param.optional,
+            ));
+          }
+          return t.tsTypeReference(clone(functionType), t.tsTypeParameterInstantiation([
+            resultType(node), t.tsTupleType(args), receiver,
+          ]));
         }
 
         function fullSignature(nodes: any[]) {
@@ -498,6 +530,12 @@ export default function schedulerPlugin(
           }
           const implementationName = path.scope.generateUidIdentifier(`${original.id?.name ?? original.key?.name ?? "function"}Impl`);
           const wrapped = wrap(generator, implementation, overloads, implementations, implementationName);
+          const existingAnnotation = path.parentPath?.isVariableDeclarator() && t.isIdentifier(path.parentPath.node.id)
+            ? path.parentPath.node.id.typeAnnotation
+            : path.parentPath?.isClassProperty() ? path.parentPath.node.typeAnnotation : undefined;
+          const explicitSimpleType = options.typeImportResolutionMode && !path.isClassMethod()
+            && !overloads.length && !original.typeParameters?.params.length && original.returnType
+            ? simpleFunctionType(original, t.isTSTypeAnnotation(existingAnnotation) ? existingAnnotation.typeAnnotation : undefined) : undefined;
           if (path.isClassMethod()) wrapped.typeParameters = null;
           if (implementationThisType) {
             const names = new Set<string>();
@@ -531,7 +569,12 @@ export default function schedulerPlugin(
             const statement = exported ? path.parentPath : path;
             const container = statement.parentPath!;
             const declaration = t.variableDeclaration("var", [t.variableDeclarator(clone(name), wrapped)]);
-            preserveComments(declaration, ...commentSources);
+            if (explicitSimpleType) {
+              (declaration.declarations[0]!.id as Types.Identifier).typeAnnotation = t.tsTypeAnnotation(explicitSimpleType);
+            }
+            if (needsHoisting || !statement.isExportNamedDeclaration()) {
+              preserveComments(declaration, ...commentSources);
+            }
             // The comments move with the declaration. Do not let Babel also
             // attach them to an untouched neighboring statement when removing it.
             t.removeComments(statement.node);
@@ -545,7 +588,9 @@ export default function schedulerPlugin(
             } else if (statement.isExportDefaultDeclaration()) {
               statement.replaceWithMultiple([...implementations, declaration, t.exportNamedDeclaration(null, [t.exportSpecifier(clone(name), t.identifier("default"))])]);
             } else {
-              statement.replaceWithMultiple([...implementations, statement.isExportNamedDeclaration() ? t.exportNamedDeclaration(declaration) : declaration]);
+              const replacement = statement.isExportNamedDeclaration() ? t.exportNamedDeclaration(declaration) : declaration;
+              if (statement.isExportNamedDeclaration()) preserveComments(replacement, ...commentSources);
+              statement.replaceWithMultiple([...implementations, replacement]);
             }
           } else if (path.isObjectMethod()) {
             path.replaceWith(t.objectProperty(clone(path.node.key), wrapped, path.node.computed));
@@ -671,6 +716,15 @@ export default function schedulerPlugin(
             // Install prototype methods before static field initializers run.
             if (hoist) classBody.unshiftContainer("body", installation);
           } else {
+            if (explicitSimpleType) {
+              if (path.parentPath?.isVariableDeclarator() && t.isIdentifier(path.parentPath.node.id)) {
+                path.parentPath.node.id.typeAnnotation = t.tsTypeAnnotation(explicitSimpleType);
+              } else if (path.parentPath?.isClassProperty()) {
+                path.parentPath.node.typeAnnotation = t.tsTypeAnnotation(explicitSimpleType);
+              } else {
+                wrapped.typeParameters = t.tsTypeParameterInstantiation([explicitSimpleType]);
+              }
+            }
             path.replaceWith(wrapped);
           }
         }
@@ -699,8 +753,19 @@ export default function schedulerPlugin(
             t.importSpecifier(clone(iterable), t.identifier("SchedulableIterable")),
             t.importSpecifier(clone(marker), t.identifier("schedulableImplementationSignal")),
             ...(usedMethodType ? [t.importSpecifier(clone(methodType), t.identifier("SchedulableMethod"))] : []),
+            ...(usedFunctionType ? [t.importSpecifier(clone(functionType), t.identifier("SchedulableFunction"))] : []),
           ], t.stringLiteral(options.runtimeModule ?? "@phryneas/schedule"));
           declaration.importKind = "type";
+          if (options.typeImportResolutionMode) {
+            // Recast prints import attributes through its legacy assertions field.
+            Object.assign(declaration, {
+              assertions: [t.importAttribute(
+                t.stringLiteral("resolution-mode"),
+                t.stringLiteral(options.typeImportResolutionMode),
+              )],
+              importAttributesKeyword: "with",
+            });
+          }
           program.unshiftContainer("body", declaration);
         }
       },

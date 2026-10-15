@@ -2,6 +2,19 @@
 
 General Codemod README here
 
+## Type import resolution
+
+Set `typeImportResolutionMode: "import"` to add
+`with { "resolution-mode": "import" }` to generated type imports from the
+scheduler runtime. `"require"` is also supported. The option is omitted by
+default and does not change runtime imports.
+
+When enabled, simple functions also receive a `SchedulableFunction` annotation
+so TypeScript's declaration emitter uses that attributed import instead of
+introducing an inline import without a resolution mode. Project transforms
+obtain signatures from TypeScript; standalone `transformSource` calls need
+explicit return annotations for this step.
+
 
 ## Yield points in codemodded source
 

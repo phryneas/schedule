@@ -11,6 +11,8 @@ export type { Exclusion } from "./analyze.ts";
 export interface CodemodOptions {
   /** Import path used by the transformed source. */
   runtimeModule?: string;
+  /** Resolution mode for generated type imports; omitted by default. */
+  typeImportResolutionMode?: "import" | "require";
 }
 
 /** Transform source before compiling JavaScript and generating declarations. */
