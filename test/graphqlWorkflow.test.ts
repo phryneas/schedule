@@ -69,7 +69,8 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   succeeds("transform");
   const transformed = join(workflow, "transformed");
   assert.match(await readFile(join(transformed, "src/index.ts"), "utf8"), /makeSchedulable/);
-  assert.equal(await readFile(join(transformed, "src/__tests__/example.ts"), "utf8"), testSource);
+  assert.equal(await readFile(join(transformed, "src/__tests__/example.ts"), "utf8"),
+    "function helper() {\n  return 1;\n}\nexport function test() {\n  return helper();\n}\n");
   assert.equal(await readFile(join(transformed, "package.json"), "utf8"), await readFile(join(patched, "package.json"), "utf8"));
   await assert.rejects(readFile(join(transformed, ".git/HEAD")), { code: "ENOENT" });
   await writeFile(join(transformed, "src/stale.ts"), "stale");

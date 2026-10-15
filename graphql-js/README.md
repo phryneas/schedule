@@ -32,8 +32,10 @@ npm ci --prefix graphql-js/patched
 node graphql-js/transform.mjs
 ```
 
-The transform copies tests and test helpers unchanged. Its exclusions are in
-`codemod.json`. Package files and build configuration are copied from `patched`;
+The codemod skips tests and test helpers. Its exclusions are in `codemod.json`.
+After transformation, the script formats `transformed/src` using the workspace's
+Prettier dependency and the copied GraphQL.js formatting configuration.
+Package files and build configuration are copied from `patched`;
 make persistent edits there rather than in `transformed`. Dependencies and Git
 metadata are not copied. Install dependencies in `transformed` separately when
 building it, including `@phryneas/schedule` as required by its generated imports.
