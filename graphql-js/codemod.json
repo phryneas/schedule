@@ -3,7 +3,10 @@
   "typeImportResolutionMode": "import",
   "excludeFiles": ["**/__tests__/**", "**/__testUtils__/**"],
   "exclude": [
+    { "file": "execution/cancellablePromise.ts", "name": "abort" },
     { "file": "diagnostics.ts", "name": "getBuiltinModule" },
+    { "file": "diagnostics.ts", "name": "traceSync" },
+    { "file": "diagnostics.ts", "name": "runStores" },
     { "file": "jsutils/SetMap.ts", "name": "SetMap.[[]Symbol.iterator[]]" }
   ]
 }

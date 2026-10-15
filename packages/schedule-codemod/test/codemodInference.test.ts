@@ -62,21 +62,35 @@ export function scheduled(value: number | string): number | string {
   return value;
 }
 export class Worker {
+  kind = 'worker' as const;
   run(value: number): number { return scheduled(value); }
   plain(value: number): number { return plain(value); }
+}
+export class OtherWorker {
+  kind = 'other' as const;
+  run(value: number): number { return scheduled(value); }
+  plain(value: number): number { return value; }
+}
+export class PlainWorker {
+  kind = 'plain' as const;
+  run(value: number): number { return value; }
 }
 export const arrow = (value: number): number => scheduled(value);
 export function chain(value: number): number { return plain(value); }
 export function chain2(value: number): number { return chain(value); }
 `);
   await writeFile(join(source, "caller.ts"), `
-import { plain, scheduled as renamed, Worker, arrow, chain2 } from './callee.ts';
+import { plain, scheduled as renamed, Worker, OtherWorker, PlainWorker, arrow, chain2 } from './callee.ts';
 export function run(callback: (value: number) => number, worker: Worker): number {
   return renamed(1) + plain(2) + callback(3) + worker.run(4) + arrow(5) + chain2(6) + worker.plain(7);
 }
 export function builtin(processRef: { getBuiltinModule: (id: string) => unknown }): unknown {
   return processRef.getBuiltinModule('node:diagnostics_channel');
 }
+export function unionScheduled(worker: Worker | OtherWorker): number { return worker.run(1); }
+export function unionPlain(worker: Worker | OtherWorker): number { return worker.plain(1); }
+export function unionMixed(worker: Worker | PlainWorker): number { return worker.run(1); }
+export function unionUnknown(worker: Worker | { run(value: number): number }): number { return worker.run(1); }
 `);
   await transformProject({ tsconfig: config, sourceDirectory: source, outputDirectory: output,
     exclude: [{ file: "caller.ts", name: "getBuiltinModule" }],
@@ -92,7 +106,10 @@ export function builtin(processRef: { getBuiltinModule: (id: string) => unknown 
   assert.match(text, /worker.plain\(7\)/);
   const callee = await readFile(join(output, "callee.ts"), "utf8");
   assert.match(callee, /export function chain2\(value: number\): number \{ return chain\(value\); \}/);
-  assert.doesNotMatch(text, /_commands.execute\((?!callback)/);
+  assert.match(text, /unionScheduled[^]*?worker.run.command.bind\(worker\)\(1\)/);
+  assert.match(text, /export function unionPlain[^]*?return worker.plain\(1\);/);
+  assert.match(text, /unionMixed[^]*?_commands.execute\(worker.run\).bind\(worker\)\(1\)/);
+  assert.match(text, /unionUnknown[^]*?_commands.execute\(worker.run\).bind\(worker\)\(1\)/);
   assert.match(text, /export function builtin/);
   assert.match(text, /return processRef.getBuiltinModule\('node:diagnostics_channel'\)/);
   const result = spawnSync(join(root, "node_modules/.bin/tsc"), [

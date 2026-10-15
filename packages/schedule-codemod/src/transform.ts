@@ -319,8 +319,9 @@ export default function schedulerPlugin(
               exit(call: NodePath<Types.CallExpression>) {
                 const node = call.node;
                 const info = options.analysis?.calls.get(node.end!);
-                const cached = info?.target && options.analysis?.commandTargets?.get(info.target.file)?.has(info.target.end);
-                const direct = info?.direct || !!(info?.target && options.analysis?.commandTargets && !cached);
+                const cached = info?.targets?.every(target => options.analysis?.commandTargets?.get(target.file)?.has(target.end));
+                const direct = info?.direct || !!(info?.targets && options.analysis?.commandTargets &&
+                  info.targets.every(target => !options.analysis!.commandTargets!.get(target.file)?.has(target.end)));
                 const superMethod = t.isMemberExpression(node.callee) && t.isSuper(node.callee.object);
                 if (direct && superMethod && !processingDirectSuper) {
                   directSuperCalls.push(call);
@@ -396,8 +397,8 @@ export default function schedulerPlugin(
             OptionalCallExpression(call: NodePath<Types.OptionalCallExpression>) {
               const node = call.node;
               const info = options.analysis?.calls.get(node.end!);
-              if (info?.direct || (info?.target && options.analysis?.commandTargets &&
-                !options.analysis.commandTargets.get(info.target.file)?.has(info.target.end))) return;
+              if (info?.direct || (info?.targets && options.analysis?.commandTargets &&
+                info.targets.every(target => !options.analysis!.commandTargets!.get(target.file)?.has(target.end)))) return;
               const target = path.scope.generateUidIdentifier("optional");
               path.scope.push({ id: clone(target), kind: "let" });
               let value: Types.Expression;

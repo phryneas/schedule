@@ -13,7 +13,7 @@ export interface Exclusion {
 
 export interface SourceAnalysis {
   functions: Map<number, { skip: boolean; signature?: string }>;
-  calls: Map<number, { direct: boolean; target?: { file: string; end: number } }>;
+  calls: Map<number, { direct: boolean; targets?: { file: string; end: number }[] }>;
   constructors: Map<number, string>;
   transformed?: Set<number>;
   commandTargets?: Map<string, Set<number>>;
@@ -61,17 +61,21 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
         ? node.expression.expression : node.expression;
       let symbol = checker.getSymbolAtLocation(callee);
       if (symbol && (symbol.flags & SymbolFlags.Alias)) symbol = checker.getAliasedSymbol(symbol);
-      let boundDeclaration = symbol?.valueDeclaration?.resolve();
-      direct ||= !!boundDeclaration && excluded(boundDeclaration);
-      if (boundDeclaration && (isVariableDeclaration(boundDeclaration) || isPropertyDeclaration(boundDeclaration) || isPropertyAssignment(boundDeclaration))) {
-        boundDeclaration = boundDeclaration.initializer;
+      const boundDeclaration = symbol?.valueDeclaration?.resolve();
+      const declarations = boundDeclaration ? [boundDeclaration] : symbol?.declarations.map(handle => handle.resolve()) ?? [];
+      if (!boundDeclaration && declarations.length > 1) {
+        // A union's resolved signature can represent only one of its members.
+        direct = !!signature && !!checker.getTypePredicateOfSignature(signature);
       }
+      direct ||= declarations.length > 0 && declarations.every(node => !!node && excluded(node));
       // A concrete implementation tells us whether this target is transformed.
       // Function-typed parameters and properties remain dynamic targets.
-      const target = boundDeclaration && (isFunctionDeclaration(boundDeclaration) || isMethodDeclaration(boundDeclaration)
-        || isFunctionExpression(boundDeclaration) || isArrowFunction(boundDeclaration))
-        ? { file: boundDeclaration.getSourceFile().fileName, end: boundDeclaration.end } : undefined;
-      result.calls.set(node.end, { direct, ...(target ? { target } : {}) });
+      const targets = declarations.map(node => {
+        if (node && (isVariableDeclaration(node) || isPropertyDeclaration(node) || isPropertyAssignment(node))) node = node.initializer;
+        return node && (isFunctionDeclaration(node) || isMethodDeclaration(node) || isFunctionExpression(node) || isArrowFunction(node))
+          ? { file: node.getSourceFile().fileName, end: node.end } : undefined;
+      });
+      result.calls.set(node.end, { direct, ...(targets.length && targets.every(target => !!target) ? { targets } : {}) });
     }
     if (isNewExpression(node) && !node.typeArguments?.length) {
       const type = checker.getTypeAtLocation(node);
