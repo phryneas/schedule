@@ -1,6 +1,6 @@
 import { cp, readFile, rm } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { transformProject } from "../src/codemod/project.ts";
+import { transformProject } from "../packages/schedule-codemod/src/project.ts";
 import { patched, transformed } from "./common.mjs";
 
 if (process.argv.length !== 2) throw new Error("Usage: node graphql-js/transform.mjs");

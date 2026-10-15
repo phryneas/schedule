@@ -42,5 +42,5 @@ building it, including `@phryneas/schedule` as required by its generated imports
 uncommitted edits there are not copied into `patched`. To change upstream versions,
 save your patch, remove `orig`, and clone again with the desired branch or tag.
 
-The entire `graphql-js` directory is excluded from the npm package by the root
-package's `files` allowlist, which includes only `dist`.
+The entire `graphql-js` directory is outside both workspace packages. Each
+package's `files` allowlist includes only `dist`.

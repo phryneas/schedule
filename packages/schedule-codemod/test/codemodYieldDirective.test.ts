@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { transformSource } from "../src/codemod/index.ts";
-import { async as scheduled } from "../src/index.ts";
-import { schedulableImplementationSignal } from "../src/internal.ts";
+import { transformSource } from "../src/index.ts";
+import { async as scheduled } from "../../schedule/src/index.ts";
+import { schedulableImplementationSignal } from "../../schedule/src/internal.ts";
 
-const runtimeModule = new URL("../src/index.ts", import.meta.url).href;
+const runtimeModule = new URL("../../schedule/src/index.ts", import.meta.url).href;
 
 test("directives make a loop schedulable and yield at the marked positions", async () => {
   const output = transformSource(`export function sum(values) {

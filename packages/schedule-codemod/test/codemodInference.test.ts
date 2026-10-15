@@ -3,10 +3,10 @@ import test from "node:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { transformProject } from "../src/codemod/index.ts";
+import { transformProject } from "../src/index.ts";
 
 test("inferred return types survive direct and mutual recursion", async t => {
-  const root = resolve(".");
+  const root = resolve("../..");
   await mkdir(join(root, ".tmp"), { recursive: true });
   const directory = await mkdtemp(join(root, ".tmp/inference-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -29,7 +29,7 @@ export function mutualB(n: number) {
 }
 `);
   await transformProject({ tsconfig: config, sourceDirectory: source, outputDirectory: output,
-    runtimeModule: join(root, "src/index.ts") });
+    runtimeModule: join(root, "packages/schedule/src/index.ts") });
   const generated = join(output, "input.ts");
   const text = await readFile(generated, "utf8");
   assert.match(text, /_SchedulableIterable<void>/);

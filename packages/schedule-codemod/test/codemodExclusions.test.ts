@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { transformSource } from "../src/codemod/index.ts";
+import { transformSource } from "../src/index.ts";
 
 test("simple functions and methods are left unchanged", () => {
   const source = `export function identity<T>(value: T): T {

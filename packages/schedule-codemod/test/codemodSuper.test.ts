@@ -4,11 +4,11 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { transformSource } from "../src/codemod/index.ts";
-import { async as scheduled, commands, makeSchedulable } from "../src/index.ts";
+import { transformSource } from "../src/index.ts";
+import { async as scheduled, commands, makeSchedulable } from "../../schedule/src/index.ts";
 
 test("super calls select the superclass method and preserve the current receiver", async t => {
-  const root = resolve(".");
+  const root = resolve("../..");
   await mkdir(join(root, ".tmp"), { recursive: true });
   const directory = await mkdtemp(join(root, ".tmp/super-method-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -25,7 +25,7 @@ test("super calls select the superclass method and preserve the current receiver
       override add(amount: number): number { return super.add(amount) + 1; }
       static override add(amount: number): number { return super.add(amount) + 2; }
     }
-  `, "fixture.ts", { runtimeModule: join(root, "src/index.ts") });
+  `, "fixture.ts", { runtimeModule: join(root, "packages/schedule/src/index.ts") });
   assert.match(output, /execute\(Base\.prototype\.add\)\.bind\(this\)/);
   assert.match(output, /execute\(Base\.add\)\.bind\(this\)/);
   assert.doesNotMatch(output, /_makeSchedulable</);

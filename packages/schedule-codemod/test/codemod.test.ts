@@ -5,11 +5,11 @@ import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { transformSync } from "@babel/core";
-import plugin from "../src/codemod/transform.ts";
-import { async as scheduled, commands, makeSchedulable } from "../src/index.ts";
+import plugin from "../src/transform.ts";
+import { async as scheduled, commands, makeSchedulable } from "../../schedule/src/index.ts";
 import * as graphql from "graphql";
 
-const runtimeModule = new URL("../src/index.ts", import.meta.url).href;
+const runtimeModule = new URL("../../schedule/src/index.ts", import.meta.url).href;
 
 function transform(source: string, filename = "fixture.mjs") {
   return transformSync(source, {

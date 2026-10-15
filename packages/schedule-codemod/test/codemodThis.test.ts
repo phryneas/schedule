@@ -4,10 +4,10 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { transformProject } from "../src/codemod/index.ts";
+import { transformProject } from "../src/index.ts";
 
 test("object methods retain their original code and contextual receiver type", async t => {
-  const root = resolve(".");
+  const root = resolve("../..");
   await mkdir(join(root, ".tmp"), { recursive: true });
   const directory = await mkdtemp(join(root, ".tmp/contextual-this-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -41,7 +41,7 @@ test("object methods retain their original code and contextual receiver type", a
   `);
   await transformProject({
     tsconfig: config, sourceDirectory: source, outputDirectory: output,
-    runtimeModule: join(root, "src/index.ts"),
+    runtimeModule: join(root, "packages/schedule/src/index.ts"),
     excludeFiles: ["**/__tests__/**"],
   });
   assert.equal(await readFile(join(output, "__tests__/example.ts"), "utf8"), originalTest);

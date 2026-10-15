@@ -15,7 +15,7 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
     filter: path => !["orig", "patched", "transformed"].some(name => path === join(repository, "graphql-js", name)),
   });
   await writeFile(join(workflow, "changes.patch"), "");
-  await symlink(join(repository, "src"), join(directory, "src"), "dir");
+  await symlink(join(repository, "packages"), join(directory, "packages"), "dir");
   const orig = join(workflow, "orig");
   await mkdir(join(orig, "src/__tests__"), { recursive: true });
   await writeFile(join(orig, ".gitignore"), "node_modules\n");

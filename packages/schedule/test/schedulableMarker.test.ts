@@ -22,7 +22,7 @@ test("declaration consumers retain the explicit symbol marker and generic callba
   const output = await mkdtemp(join(root, ".tmp/marker-declarations-"));
   t.after(() => rm(output, { recursive: true, force: true }));
   function compile(args: string[]) {
-    const result = spawnSync(join(root, "node_modules/.bin/tsc"), args, { encoding: "utf8" });
+    const result = spawnSync(resolve(root, "../../node_modules/.bin/tsc"), args, { encoding: "utf8" });
     assert.equal(result.status, 0, result.stdout + result.stderr);
   }
   compile(["-p", "tsconfig.test-types.json", "--noEmit", "false", "--emitDeclarationOnly", "--outDir", output]);

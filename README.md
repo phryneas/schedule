@@ -3,8 +3,7 @@
 Write a computation once and run it synchronously or cooperatively, giving the
 event loop time to handle input and rendering between chunks of work.
 
-The examples use this checkout's source paths. Run `npm test` with Node.js 24+
-to test them, or `npm run build` to compile the source into `dist`.
+Install with `npm install @phryneas/schedule`.
 
 ## Getting started
 
@@ -12,8 +11,8 @@ Use a regular generator with `makeSchedulable`. Check the scheduling signal
 inside expensive loops and yield when its time budget is used up.
 
 ```ts
-import { makeSchedulable, commands, sync, async } from "./src/index.ts";
-import type { SchedulableIterable } from "./src/types.ts";
+import { makeSchedulable, commands, sync, async } from "@phryneas/schedule";
+import type { SchedulableIterable } from "@phryneas/schedule";
 
 const sum = makeSchedulable(function* sum(
   values: number[],
@@ -150,3 +149,8 @@ try {
 
 Work stops at its next cancellation check. To cancel an external operation too,
 pass it an abort signal if its API supports one.
+
+## Codemod
+
+To transform existing TypeScript code, see
+[`@phryneas/schedule-codemod`](https://www.npmjs.com/package/@phryneas/schedule-codemod).

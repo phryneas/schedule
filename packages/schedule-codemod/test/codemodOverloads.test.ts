@@ -4,15 +4,15 @@ import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { transformSource } from "../src/codemod/index.ts";
-import { async, commands, makeSchedulable } from "../src/index.ts";
+import { transformSource } from "../src/index.ts";
+import { async, commands, makeSchedulable } from "../../schedule/src/index.ts";
 
 test("standalone generator overloads preserve published call signatures", async t => {
-  const root = resolve(".");
+  const root = resolve("../..");
   await mkdir(join(root, ".tmp"), { recursive: true });
   const directory = await mkdtemp(join(root, ".tmp/overloads-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  const runtime = join(root, "src/index.ts");
+  const runtime = join(root, "packages/schedule/src/index.ts");
   const output = transformSource(`
     function plain<T>(value: T): T { return value; }
     export function simple(value: number): number { return plain(value); }

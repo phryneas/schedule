@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { transformSource } from "../src/codemod/index.ts";
+import { transformSource } from "../src/index.ts";
 import { parseSync } from "@babel/core";
 
 test("files with no transformed functions retain their exact formatting", () => {

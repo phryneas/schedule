@@ -17,7 +17,7 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Build base package
+      - name: Build packages
         run: npm run build
       - name: Publish to pkg.pr.new
-        run: npm exec -- pkg-pr-new publish --previewVersion --no-compact --commentWithSha .
+        run: npm exec -- pkg-pr-new publish --previewVersion --no-compact --commentWithSha ./packages/schedule ./packages/schedule-codemod

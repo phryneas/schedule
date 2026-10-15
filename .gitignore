@@ -2,3 +2,4 @@ node_modules
 dist
 .tmp
 *.tgz
+/packages/schedule/README.md
