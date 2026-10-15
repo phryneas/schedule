@@ -345,10 +345,19 @@ index 6071116c7693777e3a557b0561a09cd3d1a9c2d5..b2f44cbe079e6ec052225c68cc38abcf
 +  });
  }
 diff --git a/src/type/__tests__/validation-test.ts b/src/type/__tests__/validation-test.ts
-index a5bd4012feb652cf96fd63268f0418492e17fb15..bbb2fe3205d32de702ba0f9730247a06714eb76b 100644
+index a5bd4012feb652cf96fd63268f0418492e17fb15..37c4b6cd172a6f3c2ef4a2c8dba1342c31b041d9 100644
 --- a/src/type/__tests__/validation-test.ts
 +++ b/src/type/__tests__/validation-test.ts
-@@ -2682,12 +2682,7 @@ describe('Type System: OneOf Input Object fields must be nullable', () => {
+@@ -2661,7 +2661,7 @@ describe('Type System: OneOf Input Object fields must be nullable', () => {
+     ]);
+   });
+ 
+-  it('checks each shared unbreakable OneOf subgraph once', () => {
++  it('checks each shared unbreakable OneOf subgraph once', (t) => {
+     const chainLength = 16;
+     const types: Array<GraphQLInputObjectType> = [];
+     types[0] = new GraphQLInputObjectType({
+@@ -2682,12 +2682,12 @@ describe('Type System: OneOf Input Object fields must be nullable', () => {
        });
      }
  
@@ -358,25 +367,29 @@ index a5bd4012feb652cf96fd63268f0418492e17fb15..bbb2fe3205d32de702ba0f9730247a06
 -          stack.includes('detectInputObjectNonFiniteValues'),
 -      }),
 -    );
-+    const getFieldsSpies = types.map((type) => spyOnMethod(type, 'getFields'));
++    const getFields = GraphQLInputObjectType.prototype.getFields;
++    const getFieldsSpy =
++      'command' in getFields
++        ? spyOnMethod(getFields, 'command')
++        : spyOnMethod(GraphQLInputObjectType.prototype, 'getFields');
++    t.after(() => getFieldsSpy.restore());
  
      const schema = new GraphQLSchema({
        query: new GraphQLObjectType({
-@@ -2702,9 +2697,16 @@ describe('Type System: OneOf Input Object fields must be nullable', () => {
+@@ -2702,9 +2702,15 @@ describe('Type System: OneOf Input Object fields must be nullable', () => {
        types,
      });
  
-+    const callsBeforeValidation = getFieldsSpies.reduce(
-+      (sum, spy) => sum + spy.callCount,
-+      0,
-+    );
++    const callsBeforeValidation = getFieldsSpy.callCount;
 +
      expect(validateSchema(schema)).to.have.lengthOf(1);
-+    // Discount field validation and default-value cycle detection.
++    // Discount field validation; default-value cycle detection calls getFields
++    // directly, so only the ordinary-function spy counts that pass too.
      expect(
 -      getFieldsSpies.reduce((sum, spy) => sum + spy.callCount, 0),
-+      getFieldsSpies.reduce((sum, spy) => sum + spy.callCount - 2, 0) -
-+        callsBeforeValidation,
++      getFieldsSpy.callCount -
++        callsBeforeValidation -
++        ('command' in getFields ? 1 : 2) * types.length,
      ).to.equal(17);
    });
  

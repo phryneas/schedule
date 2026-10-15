@@ -1,7 +1,7 @@
 import { matchesGlob, relative } from "node:path";
-import { NodeBuilderFlags, SignatureKind } from "typescript/unstable/sync";
+import { NodeBuilderFlags, SignatureKind, SymbolFlags } from "typescript/unstable/sync";
 import type { Project, Signature } from "typescript/unstable/sync";
-import { SyntaxKind, isCallExpression, isFunctionDeclaration, isFunctionExpression, isArrowFunction, isMethodDeclaration, isClassDeclaration, isVariableDeclaration, isPropertyAssignment, isPropertyAccessExpression, isNewExpression } from "typescript/unstable/ast";
+import { SyntaxKind, isCallExpression, isFunctionDeclaration, isFunctionExpression, isArrowFunction, isMethodDeclaration, isClassDeclaration, isVariableDeclaration, isPropertyDeclaration, isPropertyAssignment, isPropertyAccessExpression, isNewExpression } from "typescript/unstable/ast";
 import type { Node, SourceFile } from "typescript/unstable/ast";
 
 export interface Exclusion {
@@ -13,8 +13,10 @@ export interface Exclusion {
 
 export interface SourceAnalysis {
   functions: Map<number, { skip: boolean; signature?: string }>;
-  calls: Map<number, { direct: boolean }>;
+  calls: Map<number, { direct: boolean; target?: { file: string; end: number } }>;
   constructors: Map<number, string>;
+  transformed?: Set<number>;
+  commandTargets?: Map<string, Set<number>>;
 }
 
 export function analyze(project: Project, source: SourceFile, root: string, exclude: Exclusion[]): SourceAnalysis {
@@ -52,10 +54,24 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
         declaration = sig?.declaration?.resolve();
       }
       const file = declaration?.getSourceFile();
-      const direct = !!signature && !!checker.getTypePredicateOfSignature(signature)
+      let direct = !!signature && !!checker.getTypePredicateOfSignature(signature)
         || !!declaration && excluded(declaration)
         || !!file && (file.isDeclarationFile || relative(root, file.fileName).startsWith(".."));
-      result.calls.set(node.end, { direct });
+      const callee = indirect && isPropertyAccessExpression(node.expression)
+        ? node.expression.expression : node.expression;
+      let symbol = checker.getSymbolAtLocation(callee);
+      if (symbol && (symbol.flags & SymbolFlags.Alias)) symbol = checker.getAliasedSymbol(symbol);
+      let boundDeclaration = symbol?.valueDeclaration?.resolve();
+      direct ||= !!boundDeclaration && excluded(boundDeclaration);
+      if (boundDeclaration && (isVariableDeclaration(boundDeclaration) || isPropertyDeclaration(boundDeclaration) || isPropertyAssignment(boundDeclaration))) {
+        boundDeclaration = boundDeclaration.initializer;
+      }
+      // A concrete implementation tells us whether this target is transformed.
+      // Function-typed parameters and properties remain dynamic targets.
+      const target = boundDeclaration && (isFunctionDeclaration(boundDeclaration) || isMethodDeclaration(boundDeclaration)
+        || isFunctionExpression(boundDeclaration) || isArrowFunction(boundDeclaration))
+        ? { file: boundDeclaration.getSourceFile().fileName, end: boundDeclaration.end } : undefined;
+      result.calls.set(node.end, { direct, ...(target ? { target } : {}) });
     }
     if (isNewExpression(node) && !node.typeArguments?.length) {
       const type = checker.getTypeAtLocation(node);

@@ -1,5 +1,6 @@
 import { schedulableImplementationSignal } from "./internal.ts";
 import { executeIterableSync } from "./syncScheduler.ts";
+import { execute } from "./commands.ts";
 import type {
   SchedulableFunction,
   SchedulableIterable,
@@ -54,7 +55,10 @@ export function makeSchedulable<
     },
   };
 
-  return Object.assign(schedulable[name]!, {
+  const result = Object.assign(schedulable[name]!, {
     [schedulableImplementationSignal]: schedulableImplementation,
+    command: execute(schedulable[name]!),
   });
+  Object.defineProperty(result, "command", { enumerable: false });
+  return result;
 }

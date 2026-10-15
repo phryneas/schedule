@@ -109,6 +109,7 @@ test(`standalone generator overloads preserve published call signatures (${mode 
     withArgs.call({ base: 1 }, 2, "wrong");
     expectTypeOf([1, 2, 3].map(identity)).toEqualTypeOf<number[]>();
     expectTypeOf(async(identity)(42)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(identity.command(42)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(nullable(null)).toEqualTypeOf<void>();
     expectTypeOf(nullable("text")).toEqualTypeOf<string>();
     expectTypeOf(async(nullable)(undefined)).toEqualTypeOf<Promise<void>>();
@@ -119,6 +120,8 @@ test(`standalone generator overloads preserve published call signatures (${mode 
     expectTypeOf(nullable(maybe)).toEqualTypeOf<string | undefined>();
     expectTypeOf(pick(1)).toEqualTypeOf<number>();
     expectTypeOf(pick("a")).toEqualTypeOf<string>();
+    expectTypeOf(pick.command(1)).toEqualTypeOf<SchedulableIterable<number>>();
+    expectTypeOf(pick.command("a")).toEqualTypeOf<SchedulableIterable<string>>();
     expectTypeOf(async(pick)(1)).toEqualTypeOf<Promise<number>>();
     expectTypeOf(async(pick)("a")).toEqualTypeOf<Promise<string>>();
     expectTypeOf(commands.execute(pick)(1)).toEqualTypeOf<SchedulableIterable<number>>();
@@ -133,6 +136,8 @@ test(`standalone generator overloads preserve published call signatures (${mode 
     expectTypeOf(async(derived.fluent)()).toEqualTypeOf<Promise<Derived>>();
     expectTypeOf(commands.execute(derived.fluent)()).toEqualTypeOf<SchedulableIterable<Derived>>();
     expectTypeOf([1, 2, 3].map(receiver.identity)).toEqualTypeOf<number[]>();
+    expectTypeOf(receiver.identity.command(1)).toEqualTypeOf<SchedulableIterable<number>>();
+    expectTypeOf(receiver.pick.command("a")).toEqualTypeOf<SchedulableIterable<string>>();
     expectTypeOf([1, 2, 3].map(receiver.any)).toEqualTypeOf<number[]>();
     expectTypeOf([1, 2, 3].map(commands.execute(receiver.identity))).toEqualTypeOf<SchedulableIterable<number>[]>();
     declare const mutablePicker: Picker<object, boolean, Map<string, number>>;

@@ -3,7 +3,7 @@ import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, matchesGlob, relative, resolve, sep } from "node:path";
 import { API } from "typescript/unstable/sync";
 import { analyze } from "./analyze.ts";
-import type { Exclusion } from "./analyze.ts";
+import type { Exclusion, SourceAnalysis } from "./analyze.ts";
 import { transformSource } from "./index.ts";
 import type { CodemodOptions } from "./index.ts";
 
@@ -36,6 +36,8 @@ export async function transformProject(options: ProjectOptions): Promise<void> {
     const project = loadedProject;
     await mkdir(dirname(outputRoot), { recursive: true });
     await mkdir(outputRoot);
+    const sources: { sourcePath: string; target: string; text: string; analysis: SourceAnalysis }[] = [];
+    let commandTargets = new Map<string, Set<number>>();
     async function convert(directory: string): Promise<void> {
       for (const entry of await readdir(join(sourceRoot, directory), { withFileTypes: true })) {
         const path = join(directory, entry.name);
@@ -50,13 +52,40 @@ export async function transformProject(options: ProjectOptions): Promise<void> {
           const source = project.program.getSourceFile(sourcePath);
           if (!source) throw new Error(`Source is not included in the TypeScript project: ${sourcePath}`);
           const analysis = analyze(project, source, sourceRoot, options.exclude ?? []);
-          await writeFile(target, transformSource(await readFile(sourcePath, "utf8"), sourcePath, options, analysis));
+          const text = await readFile(sourcePath, "utf8");
+          analysis.transformed = new Set();
+          // Determine which declarations really acquire a command, including
+          // overloads, before choosing call sites across file boundaries.
+          transformSource(text, sourcePath, options, analysis);
+          commandTargets.set(sourcePath, analysis.transformed);
+          sources.push({ sourcePath, target, text, analysis });
         } else {
           await cp(sourcePath, target);
         }
       }
     }
     await convert("");
+    // Removing calls to untransformed functions can remove a caller's last
+    // yield. Repeat until that information has propagated through the project.
+    while (true) {
+      const nextTargets = new Map<string, Set<number>>();
+      const outputs = [];
+      for (const { sourcePath, target, text, analysis } of sources) {
+        analysis.commandTargets = commandTargets;
+        analysis.transformed = new Set();
+        outputs.push({ target, text: transformSource(text, sourcePath, options, analysis) });
+        nextTargets.set(sourcePath, analysis.transformed);
+      }
+      const stable = [...nextTargets].every(([file, ends]) => {
+        const previous = commandTargets.get(file)!;
+        return ends.size === previous.size && [...ends].every(end => previous.has(end));
+      });
+      commandTargets = nextTargets;
+      if (stable) {
+        for (const { target, text } of outputs) await writeFile(target, text);
+        break;
+      }
+    }
   } finally {
     api.close();
   }

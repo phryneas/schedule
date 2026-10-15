@@ -3,6 +3,7 @@
   "typeImportResolutionMode": "import",
   "excludeFiles": ["**/__tests__/**", "**/__testUtils__/**"],
   "exclude": [
+    { "file": "diagnostics.ts", "name": "getBuiltinModule" },
     { "file": "jsutils/SetMap.ts", "name": "SetMap.[[]Symbol.iterator[]]" }
   ]
 }

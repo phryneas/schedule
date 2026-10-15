@@ -33,6 +33,7 @@ export default function schedulerPlugin(
         const hoisted = new Map<NodePath<any>, Types.Statement[]>();
         const localCalls = new WeakSet<Types.CallExpression>();
         let used = false;
+        let usedCommands = false;
         let usedTypes = false;
         let usedMethodType = false;
         let usedFunctionType = false;
@@ -269,7 +270,8 @@ export default function schedulerPlugin(
           });
           const property = t.tsPropertySignature(clone(marker), t.tsTypeAnnotation(t.tsTypeLiteral([...calls("generator"), ...metadata])));
           property.computed = true;
-          return t.tsTypeLiteral([...calls("sync"), property]);
+          const command = t.tsPropertySignature(t.identifier("command"), t.tsTypeAnnotation(overloadType(nodes, "generator")));
+          return t.tsTypeLiteral([...calls("sync"), property, command]);
         }
 
         function wrap(generator: Types.FunctionExpression, original: any, overloads: any[], declarations: Types.Statement[], implementationName: Types.Identifier) {
@@ -317,12 +319,14 @@ export default function schedulerPlugin(
               exit(call: NodePath<Types.CallExpression>) {
                 const node = call.node;
                 const info = options.analysis?.calls.get(node.end!);
+                const cached = info?.target && options.analysis?.commandTargets?.get(info.target.file)?.has(info.target.end);
+                const direct = info?.direct || !!(info?.target && options.analysis?.commandTargets && !cached);
                 const superMethod = t.isMemberExpression(node.callee) && t.isSuper(node.callee.object);
-                if (info?.direct && superMethod && !processingDirectSuper) {
+                if (direct && superMethod && !processingDirectSuper) {
                   directSuperCalls.push(call);
                   return;
                 }
-                if (info?.direct && !superMethod) return;
+                if (direct && !superMethod) return;
                 if (t.isSuper(node.callee) || t.isImport(node.callee)) return;
                 if (t.isIdentifier(node.callee) && node.callee.name === make.name) return;
                 if (t.isIdentifier(node.callee) && node.callee.name === "eval") {
@@ -375,20 +379,25 @@ export default function schedulerPlugin(
                     }
                   }
                 }
-                let factory: Types.Expression = info?.direct ? fn : t.callExpression(t.memberExpression(clone(commands), t.identifier("execute")), [fn]);
+                if (!direct && !cached) usedCommands = true;
+                let factory: Types.Expression = direct ? fn : cached
+                  ? t.memberExpression(fn, t.identifier("command"))
+                  : t.callExpression(t.memberExpression(clone(commands), t.identifier("execute")), [fn]);
                 if (hasReceiver && !applyArgs) factory = t.callExpression(t.memberExpression(factory, t.identifier("bind")), [receiver]);
                 const command = applyArgs
                   ? t.callExpression(t.memberExpression(factory, t.identifier("apply")), [receiver, applyArgs])
                   : t.callExpression(factory, args);
                 if (node.typeParameters && !applyArgs) command.typeParameters = clone(node.typeParameters);
-                const delegated = info?.direct ? command : t.yieldExpression(command, true);
+                const delegated = direct ? command : t.yieldExpression(command, true);
                 call.replaceWith(before.length ? t.sequenceExpression([...before, delegated]) : delegated);
                 call.skip();
               },
             },
             OptionalCallExpression(call: NodePath<Types.OptionalCallExpression>) {
               const node = call.node;
-              if (options.analysis?.calls.get(node.end!)?.direct) return;
+              const info = options.analysis?.calls.get(node.end!);
+              if (info?.direct || (info?.target && options.analysis?.commandTargets &&
+                !options.analysis.commandTargets.get(info.target.file)?.has(info.target.end))) return;
               const target = path.scope.generateUidIdentifier("optional");
               path.scope.push({ id: clone(target), kind: "let" });
               let value: Types.Expression;
@@ -446,6 +455,7 @@ export default function schedulerPlugin(
           }
           const checkpoints = directives.get(path);
           if (checkpoints) {
+            usedCommands = true;
             const signal = path.scope.generateUidIdentifier("signal");
             for (const { block, comment } of [...checkpoints].reverse()) {
               const check = t.ifStatement(t.memberExpression(clone(signal), t.identifier("shouldYield")), t.blockStatement([
@@ -502,6 +512,8 @@ export default function schedulerPlugin(
             }
           }
           const overloads = overloadPaths.map(p => clone(p.node));
+          options.analysis?.transformed?.add(path.node.end!);
+          for (const overload of overloadPaths) options.analysis?.transformed?.add(overload.node.end!);
           const commentSources = [...overloadPaths, path].flatMap(p =>
             p.parentPath!.isExportDeclaration() ? [p.parentPath!.node, p.node] : [p.node]);
           // Moving this body can change indentation. Reprint its template contents
@@ -693,8 +705,9 @@ export default function schedulerPlugin(
                     [t.tsExpressionWithTypeArguments(clone(generatorName), argumentsFor())], t.tsInterfaceBody(metadata)));
                   const markerMember = t.tsPropertySignature(clone(marker), t.tsTypeAnnotation(reference(implementationName)));
                   markerMember.computed = true;
+                  const commandMember = t.tsPropertySignature(t.identifier("command"), t.tsTypeAnnotation(reference(generatorName)));
                   declarations.push(t.tsInterfaceDeclaration(clone(methodName), declarationParams(),
-                    [t.tsExpressionWithTypeArguments(clone(syncName), argumentsFor())], t.tsInterfaceBody([markerMember])));
+                    [t.tsExpressionWithTypeArguments(clone(syncName), argumentsFor())], t.tsInterfaceBody([markerMember, commandMember])));
                 }
                 const existing = signatureNamespaces.get(cls) ?? [];
                 existing.unshift(...declarations);
@@ -745,7 +758,7 @@ export default function schedulerPlugin(
         if (used) {
           program.unshiftContainer("body", t.importDeclaration([
             t.importSpecifier(clone(make), t.identifier("makeSchedulable")),
-            t.importSpecifier(clone(commands), t.identifier("commands")),
+            ...(usedCommands ? [t.importSpecifier(clone(commands), t.identifier("commands"))] : []),
           ], t.stringLiteral(options.runtimeModule ?? "@phryneas/schedule")));
         }
         if (usedTypes) {

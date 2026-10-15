@@ -5,6 +5,7 @@ import type { schedulableImplementationSignal as key } from "../src/index.ts";
 
 type Identity = {
   <T>(value: T): T;
+  command: Identity[typeof key];
   [key]: {
     <T>(value: T): SchedulableIterable<T>;
     syncSignature?<T>(value: T): T;
@@ -19,6 +20,8 @@ expectTypeOf(identity(42)).toEqualTypeOf<number>();
 expectTypeOf(sync(identity)(42)).toEqualTypeOf<number>();
 expectTypeOf(async(identity)(42)).toEqualTypeOf<Promise<number>>();
 expectTypeOf(commands.execute(identity)(42)).toEqualTypeOf<SchedulableIterable<number>>();
+expectTypeOf(identity.command(42)).toEqualTypeOf<SchedulableIterable<number>>();
+expectTypeOf(identity.command("value")).toEqualTypeOf<SchedulableIterable<string>>();
 
 type WrongReturn = {
   (value: number): number;

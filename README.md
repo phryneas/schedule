@@ -86,6 +86,17 @@ const sumBatches = makeSchedulable(function* sumBatches(
 Ordinary functions and callbacks also work, but run uninterrupted once called.
 For methods, bind the receiver: `yield* commands.execute(object.method).bind(object)(arg)`.
 
+Functions created with `makeSchedulable` also have a reusable `.command` shortcut instead of calling `commands.execute`:
+
+```ts
+const total = yield* sum.command(values);
+const result = yield* object.method.command.bind(object)(arg);
+```
+
+Use `commands.execute` for callbacks that may be ordinary functions. When
+supplying a full generic or overloaded signature to `makeSchedulable`, include
+the generator call signatures in its `command` property too.
+
 ### `commands.syncAware({ sync, async })(...args)`
 
 Call an external dependency's synchronous or promise-returning implementation,

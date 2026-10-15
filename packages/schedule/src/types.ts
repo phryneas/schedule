@@ -31,6 +31,7 @@ export interface SchedulableFunction<
 > {
   (this: ThisArg, ...args: Args): Ret;
   [schedulableImplementationSignal]: SchedulableImplementation<Ret, Args, ThisArg>;
+  command: SchedulableImplementation<Ret, Args, ThisArg>;
 }
 
 type MethodOf<This, Args extends unknown[], Ret> = {
@@ -46,6 +47,7 @@ interface SchedulableMethodImplementation<ThisArg, Args extends unknown[], Ret>
 interface SchedulableMethodSignature<ThisArg, Args extends unknown[], Ret>
   extends MethodOf<ThisArg, Args, Ret> {
   [schedulableImplementationSignal]: SchedulableMethodImplementation<ThisArg, Args, Ret>;
+  command: SchedulableMethodImplementation<ThisArg, Args, Ret>;
 }
 
 /** Explicit signature for a non-generic, non-overloaded method. */

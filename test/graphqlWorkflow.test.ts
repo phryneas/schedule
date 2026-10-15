@@ -24,7 +24,7 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
     include: ["src/**/*.ts"],
   }));
   await writeFile(join(orig, "package.json"), '{"name":"fixture","type":"module"}\n');
-  const original = "function helper(): number { return 1; }\nexport function work(): number { return helper(); }\n";
+  const original = "function helper(): number { return 1; }\nexport function work(): number {\n// @phryneas/schedule may-yield-here\nreturn helper();\n}\n";
   await writeFile(join(orig, "src/index.ts"), original);
   await writeFile(join(orig, "src/deleted.ts"), "export const deleted = true;\n");
   const testSource = "function helper() { return 1; }\nexport function test() { return helper(); }\n";
