@@ -3,8 +3,7 @@
 Write a computation once and run it synchronously or cooperatively, giving the
 event loop time to handle input and rendering between chunks of work.
 
-The examples use this checkout's source paths. Run `npm test` with Node.js 24+
-to test them, or `npm run build` to compile the source into `dist`.
+Install with `npm install @phryneas/schedule`.
 
 ## Getting started
 
@@ -12,8 +11,8 @@ Use a regular generator with `makeSchedulable`. Check the scheduling signal
 inside expensive loops and yield when its time budget is used up.
 
 ```ts
-import { makeSchedulable, commands, sync, async } from "./src/index.ts";
-import type { SchedulableIterable } from "./src/types.ts";
+import { makeSchedulable, commands, sync, async } from "@phryneas/schedule";
+import type { SchedulableIterable } from "@phryneas/schedule";
 
 const sum = makeSchedulable(function* sum(
   values: number[],
@@ -67,10 +66,9 @@ if (signal.shouldYield) {
 
 Put this check inside long loops, as in `sum` above, to keep the UI responsive.
 
-### `commands.execute(fn, thisArg, args)`
+### `commands.execute(fn)(...args)`
 
 Call another function and get its result, using the current execution mode.
-Pass `undefined` for `thisArg` when the function does not need a receiver.
 Schedulable functions inherit the current scheduler they are running in.
 
 ```ts
@@ -79,13 +77,14 @@ const sumBatches = makeSchedulable(function* sumBatches(
 ): SchedulableIterable<number> {
   let total = 0;
   for (const batch of batches) {
-    total += yield* commands.execute(sum, undefined, [batch]);
+    total += yield* commands.execute(sum)(batch);
   }
   return total;
 });
 ```
 
 Ordinary functions and callbacks also work, but run uninterrupted once called.
+For methods, bind the receiver: `yield* commands.execute(object.method).bind(object)(arg)`.
 
 ### `commands.syncAware({ sync, async, args })`
 
@@ -150,3 +149,8 @@ try {
 
 Work stops at its next cancellation check. To cancel an external operation too,
 pass it an abort signal if its API supports one.
+
+## Codemod
+
+To transform existing TypeScript code, see
+[`@phryneas/schedule-codemod`](https://www.npmjs.com/package/@phryneas/schedule-codemod).

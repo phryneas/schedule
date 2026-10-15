@@ -1,4 +1,18 @@
-import type { SchedulableIterable, ScheduleSignal } from "./types.ts";
+import type {
+  SchedulableIterable,
+  SchedulableMarker,
+  ScheduleSignal,
+} from "./types.ts";
+import type { schedulableImplementationSignal } from "./internal.ts";
+import type {
+  HasMultipleSignatures,
+  MapResults,
+  TypeFunction,
+} from "./mapResults.ts";
+
+interface ToSchedulable extends TypeFunction {
+  readonly output: SchedulableIterable<this["input"]>;
+}
 
 export type Command =
   | { kind: "getSignal" }
@@ -27,23 +41,48 @@ export function* getSignal(): SchedulableIterable<ScheduleSignal> {
   return (yield { kind: "getSignal" }) as ScheduleSignal;
 }
 
-export const execute = <Ret, Args extends Array<unknown>, ThisArg>(
+export function execute<Fn extends (...args: any[]) => unknown>(
+  fn: HasMultipleSignatures<Fn> extends true
+    ? Fn
+    : Fn extends SchedulableMarker<
+        (...args: any[]) => SchedulableIterable<unknown>,
+        any,
+        any
+      > ? Fn : never,
+  startImmediately?: boolean,
+): Fn extends SchedulableMarker<
+  (...args: any[]) => SchedulableIterable<unknown>,
+  any,
+  any
+>
+  ? Fn[typeof schedulableImplementationSignal]
+  : MapResults<Fn, ToSchedulable>;
+export function execute<Ret, Args extends Array<unknown>, ThisArg>(
   fn: (this: ThisArg, ...args: Args) => Ret,
-  thisArg: ThisArg,
-  args: Args,
+  startImmediately?: boolean,
+): (this: ThisArg, ...args: Args) => SchedulableIterable<Ret>;
+export function execute(
+  fn: Function,
+  startImmediately?: boolean,
+): (this: unknown, ...args: any[]) => SchedulableIterable<any>;
+export function execute(
+  fn: Function,
   startImmediately = false,
-): SchedulableIterable<Ret> => {
-  return (function* executeCommand(): Generator<Command, Ret> {
+) {
+  return function* executeCommand(
+    this: unknown,
+    ...args: unknown[]
+  ): SchedulableIterable<unknown> {
     const result = yield {
       kind: "execute" as const,
       fn: fn as any,
       args,
-      this: thisArg,
+      this: this,
       startImmediately,
     };
-    return result as Ret;
-  })();
-};
+    return result;
+  };
+}
 
 export const syncAware = <Ret, Args extends Array<unknown>, ThisArg>(options: {
   sync: (this: ThisArg, ...args: Args) => Ret;

@@ -1,0 +1,8 @@
+{
+  "runtimeModule": "@phryneas/schedule",
+  "typeImportResolutionMode": "import",
+  "excludeFiles": ["**/__tests__/**", "**/__testUtils__/**"],
+  "exclude": [
+    { "file": "jsutils/SetMap.ts", "name": "SetMap.[[]Symbol.iterator[]]" }
+  ]
+}

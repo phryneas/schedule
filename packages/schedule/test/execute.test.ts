@@ -3,6 +3,27 @@ import test from "node:test";
 import { makeSchedulable, async, execute, yieldNow } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
+test("execute supports dynamically narrowed ordinary and schedulable methods", async () => {
+  const serialize = makeSchedulable(function* (value: Record<string, unknown>) {
+    if (typeof value.toJSON === "function") {
+      return yield* execute(value.toJSON).bind(value)(3);
+    }
+    return value;
+  });
+  const ordinary = { total: 10, toJSON(amount: number) { return this.total + amount; } };
+  const scheduled = {
+    total: 20,
+    toJSON: makeSchedulable(function* (this: { total: number }, amount: number) {
+      yield* yieldNow();
+      return this.total + amount;
+    }),
+  };
+  for (const [value, expected] of [[ordinary, 13], [scheduled, 23]] as const) {
+    assert.equal(serialize(value), expected);
+    assert.equal(await async(serialize)(value), expected);
+  }
+});
+
 test("execute composes schedulable functions", async () => {
   const sum = makeSchedulable(function* (values: number[]): SchedulableIterable<number> {
     return values.reduce((total, value) => total + value, 0);
@@ -10,7 +31,7 @@ test("execute composes schedulable functions", async () => {
   const sumBatches = makeSchedulable(function* (batches: number[][]): SchedulableIterable<number> {
     let total = 0;
     for (const batch of batches) {
-      total += yield* execute(sum, undefined, [batch]);
+      total += yield* execute(sum)(batch);
     }
     return total;
   });
@@ -27,7 +48,7 @@ test("execute forwards this and arguments to an ordinary function", async () => 
     return this.total;
   }
   const work = makeSchedulable(function* (): SchedulableIterable<number> {
-    return yield* execute(add, receiver, [3]);
+    return yield* execute(add).bind(receiver)(3);
   });
 
   assert.equal(work(), 13);
@@ -50,7 +71,7 @@ test("execute forwards this and arguments to a schedulable function", async () =
     return this.total;
   });
   const work = makeSchedulable(function* (): SchedulableIterable<number> {
-    return yield* execute(add, receiver, [3]);
+    return yield* execute(add).bind(receiver)(3);
   });
 
   assert.equal(work(), 13);

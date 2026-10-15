@@ -20,7 +20,7 @@ test("nested scheduler calls do not change the outer signal", async () => {
   const parent = makeSchedulable(function* (): SchedulableIterable<void> {
     const signal = yield* getSignal();
     check();
-    yield* execute(check, undefined, []);
+    yield* execute(check)();
     yield* syncAware({
       sync: check,
       async: async () => { assert.equal(await async(child)(), 42); },
@@ -41,7 +41,7 @@ test("execute composition preserves safe generator execution in both modes", asy
   });
   const parent = makeSchedulable(function* (): SchedulableIterable<number> {
     const signal = yield* getSignal();
-    const result = yield* execute(child, undefined, []);
+    const result = yield* execute(child)();
     assert.equal(yield* getSignal(), signal);
     return result;
   });
