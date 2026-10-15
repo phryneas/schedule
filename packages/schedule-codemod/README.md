@@ -40,3 +40,20 @@ callbacks, report an error.
 Functions are wrapped only when the resulting body contains a yield, whether
 from a directive or a call converted to `commands.execute`. A loop alone does
 not cause wrapping.
+
+To explicitly make an inline callback or returned-object method schedulable,
+put this comment immediately before the function:
+
+```ts
+return {
+  // @phryneas/schedule schedulable
+  Field(node) {
+    processField(node);
+  },
+};
+```
+
+This forces wrapping even without a yield and enables normal call rewriting
+inside that function. Use `may-yield-here` separately for loop checkpoints.
+Async functions, existing generators, constructors, accessors, type guards,
+and configured exclusions still cannot be opted in.

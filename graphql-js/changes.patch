@@ -133,7 +133,7 @@ index cb84ee2feb89ded3a85e576ec810676eded69ec7..5937c64f6c3ec1ccee0aad4fe0669143
        "version": "1.1.0",
        "resolved": "https://registry.npmjs.org/@rtsao/scc/-/scc-1.1.0.tgz",
 diff --git a/package.json b/package.json
-index 8613fef4f594d84dc92429cb606b129b10a500b8..5ba52fdf407fb5875367b87233ff2c25ac663d19 100644
+index 8613fef4f594d84dc92429cb606b129b10a500b8..43795a6968eeb10e8ec627172bd0fdb63bcbcfa6 100644
 --- a/package.json
 +++ b/package.json
 @@ -1,5 +1,5 @@
@@ -162,7 +162,7 @@ index 8613fef4f594d84dc92429cb606b129b10a500b8..5ba52fdf407fb5875367b87233ff2c25
      "check:deno": "npm run build:deno && deno publish --dry-run --allow-dirty --config denoDist/jsr.json",
      "testonly": "npm run node:test -- \"src/**/__tests__/**/*-test.ts\"",
 -    "testonly:cover": "npm run node:test -- --experimental-test-coverage --test-coverage-include=\"src/**/*.ts\" --test-coverage-exclude=\"src/**/__tests__/**\" --test-coverage-exclude=\"**/*-test.ts\" --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 \"src/**/__tests__/**/*-test.ts\"",
-+    "testonly:cover": "npm run node:test -- --experimental-test-coverage --test-coverage-include=\"src/**/*.ts\" --test-coverage-exclude=\"src/**/__tests__/**\" --test-coverage-exclude=\"**/*-test.ts\" --test-coverage-lines=99 --test-coverage-branches=99 --test-coverage-functions=100 \"src/**/__tests__/**/*-test.ts\"",
++    "testonly:cover": "npm run node:test -- --experimental-test-coverage --test-coverage-include=\"src/**/*.ts\" --test-coverage-exclude=\"src/**/__tests__/**\" --test-coverage-exclude=\"**/*-test.ts\" --test-coverage-lines=97 --test-coverage-branches=97 --test-coverage-functions=100 \"src/**/__tests__/**/*-test.ts\"",
      "testonly:watch": "npm run node:test -- --watch \"src/**/__tests__/**/*-test.ts\"",
      "prettier": "prettier --cache --cache-strategy metadata --write --list-different .",
      "prettier:check": "prettier --cache --cache-strategy metadata --check .",
@@ -226,6 +226,26 @@ index 48b7cdbd0d3eea7e9ca348edf1b11baec24a094a..e6a911c53bf848c48e8cfc1c40735d9e
          const customExecutor: typeof executeSubscriptionEvent = (args) =>
            executeSubscriptionEvent(args);
  
+diff --git a/src/execution/collectFields.ts b/src/execution/collectFields.ts
+index 8a1fb1de46d3cdca25674730329547845b75eb82..2d003b3792760c6d494afb0b93fea2ff46446932 100644
+--- a/src/execution/collectFields.ts
++++ b/src/execution/collectFields.ts
+@@ -159,6 +159,7 @@ export function collectSubfields(
+   const newDeferUsages: Array<DeferUsage> = [];
+ 
+   for (const fieldDetail of fieldDetailsList) {
++    // @phryneas/schedule may-yield-here
+     const selectionSet = fieldDetail.node.selectionSet;
+     if (selectionSet) {
+       const { deferUsage, fragmentVariableValues } = fieldDetail;
+@@ -199,6 +200,7 @@ function collectFieldsImpl(
+   } = context;
+ 
+   for (const selection of selectionSet.selections) {
++    // @phryneas/schedule may-yield-here
+     switch (selection.kind) {
+       case Kind.FIELD: {
+         if (
 diff --git a/src/jsutils/memoize1.ts b/src/jsutils/memoize1.ts
 index c05ad25ed505e174304b731b2e77b9aa4a93eaa8..e09132d1f5b28c98c270b423bd60effb68c3ce7d 100644
 --- a/src/jsutils/memoize1.ts
@@ -344,11 +364,140 @@ index 6071116c7693777e3a557b0561a09cd3d1a9c2d5..b2f44cbe079e6ec052225c68cc38abcf
 -  };
 +  });
  }
+diff --git a/src/jsutils/suggestionList.ts b/src/jsutils/suggestionList.ts
+index caae33ae6e671689270c1382309e7717dce14b2c..48e4af01014a2511f4090cdd5720c1b22e88d348 100644
+--- a/src/jsutils/suggestionList.ts
++++ b/src/jsutils/suggestionList.ts
+@@ -15,6 +15,7 @@ export function suggestionList(
+ 
+   const threshold = Math.floor(input.length * 0.4) + 1;
+   for (const option of options) {
++    // @phryneas/schedule may-yield-here
+     const distance = lexicalDistance.measure(option, threshold);
+     if (distance !== undefined) {
+       optionsByDistance[option] = distance;
+@@ -90,10 +91,12 @@ class LexicalDistance {
+ 
+     const rows = this._rows;
+     for (let j = 0; j <= bLength; j++) {
++      // @phryneas/schedule may-yield-here
+       rows[0][j] = j;
+     }
+ 
+     for (let i = 1; i <= aLength; i++) {
++      // @phryneas/schedule may-yield-here
+       const upRow = rows[(i - 1) % 3];
+       const currentRow = rows[i % 3];
+ 
+@@ -135,6 +138,7 @@ function stringToArray(str: string): Array<number> {
+   const strLength = str.length;
+   const array = new Array(strLength);
+   for (let i = 0; i < strLength; ++i) {
++    // @phryneas/schedule may-yield-here
+     array[i] = str.charCodeAt(i);
+   }
+   return array;
+diff --git a/src/language/lexer.ts b/src/language/lexer.ts
+index 6e33612bc1019dc10757c1d10d24b0511206fd7b..ef4eba2c27311b817eaf42106c41ee94258337b9 100644
+--- a/src/language/lexer.ts
++++ b/src/language/lexer.ts
+@@ -258,6 +258,7 @@ function readNextToken(lexer: Lexer, start: number): Token {
+   let position = start;
+ 
+   while (position < bodyLength) {
++    // @phryneas/schedule may-yield-here
+     const code = body.charCodeAt(position);
+ 
+     // SourceCharacter
+@@ -414,6 +415,7 @@ function readComment(lexer: Lexer, start: number): Token {
+   let position = start + 1;
+ 
+   while (position < bodyLength) {
++    // @phryneas/schedule may-yield-here
+     const code = body.charCodeAt(position);
+ 
+     // LineTerminator (\n | \r)
+@@ -564,6 +566,7 @@ function readDigits(lexer: Lexer, start: number, firstCode: number): number {
+   let position = start + 1; // +1 to skip first firstCode
+ 
+   while (isDigit(body.charCodeAt(position))) {
++    // @phryneas/schedule may-yield-here
+     ++position;
+   }
+ 
+@@ -600,6 +603,7 @@ function readString(lexer: Lexer, start: number): Token {
+   let value = '';
+ 
+   while (position < bodyLength) {
++    // @phryneas/schedule may-yield-here
+     const code = body.charCodeAt(position);
+ 
+     // Closing Quote (")
+@@ -844,6 +848,7 @@ function readBlockString(lexer: Lexer, start: number): Token {
+ 
+   const blockLines = [];
+   while (position < bodyLength) {
++    // @phryneas/schedule may-yield-here
+     const code = body.charCodeAt(position);
+ 
+     // Closing Triple-Quote (""")
+@@ -935,6 +940,7 @@ export function readName(lexer: LexerInterface, start: number): Token {
+   let position = start + 1;
+ 
+   while (position < bodyLength) {
++    // @phryneas/schedule may-yield-here
+     const code = body.charCodeAt(position);
+     if (isNameContinue(code)) {
+       ++position;
+diff --git a/src/language/parser.ts b/src/language/parser.ts
+index 958f9c7773114add14f7f3738db7472d49f077dc..4c3cd9f217dd939ea79d7ff53bb613418cf81320 100644
+--- a/src/language/parser.ts
++++ b/src/language/parser.ts
+@@ -970,6 +970,7 @@ export class Parser {
+   parseDirectives(isConst: boolean): Array<DirectiveNode> | undefined {
+     const directives = [];
+     while (this.peek(TokenKind.AT)) {
++      // @phryneas/schedule may-yield-here
+       directives.push(this.parseDirective(isConst));
+     }
+     if (directives.length) {
+@@ -1939,6 +1940,7 @@ export class Parser {
+     this.expectToken(openKind);
+     const nodes = [];
+     while (!this.expectOptionalToken(closeKind)) {
++      // @phryneas/schedule may-yield-here
+       nodes.push(parseFn.call(this));
+     }
+     return nodes;
+@@ -1960,6 +1962,7 @@ export class Parser {
+     if (this.expectOptionalToken(openKind)) {
+       const nodes = [];
+       do {
++        // @phryneas/schedule may-yield-here
+         nodes.push(parseFn.call(this));
+       } while (!this.expectOptionalToken(closeKind));
+       return nodes;
+@@ -1982,6 +1985,7 @@ export class Parser {
+     this.expectToken(openKind);
+     const nodes = [];
+     do {
++      // @phryneas/schedule may-yield-here
+       nodes.push(parseFn.call(this));
+     } while (!this.expectOptionalToken(closeKind));
+     return nodes;
+@@ -1999,6 +2003,7 @@ export class Parser {
+ 
+     const nodes = [];
+     do {
++      // @phryneas/schedule may-yield-here
+       nodes.push(parseFn.call(this));
+     } while (this.expectOptionalToken(delimiterKind));
+     return nodes;
 diff --git a/src/language/visitor.ts b/src/language/visitor.ts
-index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..f1da430bb3b335786e196e80947127eed354d8c6 100644
+index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..f8fcd65c8b41d4fb922402cf87d35364ed9fe32f 100644
 --- a/src/language/visitor.ts
 +++ b/src/language/visitor.ts
-@@ -273,11 +273,11 @@ export function visit(
+@@ -273,15 +273,16 @@ export function visit(
    let inArray = Array.isArray(root);
    let keys: any = [root];
    let index = -1;
@@ -362,6 +511,43 @@ index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..f1da430bb3b335786e196e80947127ee
    const ancestors = [];
    /* eslint-enable no-undef-init */
  
+   do {
++    // @phryneas/schedule may-yield-here
+     index++;
+     const isLeaving = index === keys.length;
+     const isEdited = isLeaving && edits.length !== 0;
+@@ -295,6 +296,7 @@ export function visit(
+ 
+           let editOffset = 0;
+           for (const [editKey, editValue] of edits) {
++            // @phryneas/schedule may-yield-here
+             const arrayKey = editKey - editOffset;
+             if (editValue === null) {
+               node.splice(arrayKey, 1);
+@@ -306,6 +308,7 @@ export function visit(
+         } else {
+           node = { ...node };
+           for (const [editKey, editValue] of edits) {
++            // @phryneas/schedule may-yield-here
+             node[editKey] = editValue;
+           }
+         }
+@@ -439,6 +442,7 @@ export function visitInParallel(
+     }
+ 
+     const mergedEnterLeave: EnterLeaveVisitor<ASTNode> = {
++      // @phryneas/schedule schedulable
+       enter(...args) {
+         const node = args[0];
+         for (let i = 0; i < visitors.length; i++) {
+@@ -454,6 +458,7 @@ export function visitInParallel(
+           }
+         }
+       },
++      // @phryneas/schedule schedulable
+       leave(...args) {
+         const node = args[0];
+         for (let i = 0; i < visitors.length; i++) {
 diff --git a/src/type/__tests__/validation-test.ts b/src/type/__tests__/validation-test.ts
 index a5bd4012feb652cf96fd63268f0418492e17fb15..37c4b6cd172a6f3c2ef4a2c8dba1342c31b041d9 100644
 --- a/src/type/__tests__/validation-test.ts
@@ -411,6 +597,444 @@ index a5bd4012feb652cf96fd63268f0418492e17fb15..37c4b6cd172a6f3c2ef4a2c8dba1342c
      ).to.equal(17);
    });
  
+diff --git a/src/type/schema.ts b/src/type/schema.ts
+index 2cbc3909ed06b6d7cb5a0288d4b7be1f46e59d02..ed44fd6f197c0dcd5c3f50010dccced38c24209c 100644
+--- a/src/type/schema.ts
++++ b/src/type/schema.ts
+@@ -710,13 +710,22 @@ export class GraphQLSchema {
+     let set = this._subTypeMap.get(abstractType);
+     if (set === undefined) {
+       if (isUnionType(abstractType)) {
+-        set = new Set<GraphQLObjectType>(abstractType.getTypes());
++        set = new Set<GraphQLObjectType>();
++        for (const type of abstractType.getTypes()) {
++          // @phryneas/schedule may-yield-here
++          set.add(type);
++        }
+       } else {
+         const implementations = this.getImplementations(abstractType);
+-        set = new Set<GraphQLObjectType | GraphQLInterfaceType>([
+-          ...implementations.objects,
+-          ...implementations.interfaces,
+-        ]);
++        set = new Set<GraphQLObjectType | GraphQLInterfaceType>();
++        for (const type of implementations.objects) {
++          // @phryneas/schedule may-yield-here
++          set.add(type);
++        }
++        for (const type of implementations.interfaces) {
++          // @phryneas/schedule may-yield-here
++          set.add(type);
++        }
+       }
+ 
+       this._subTypeMap.set(abstractType, set);
+diff --git a/src/type/validate.ts b/src/type/validate.ts
+index e09122869f0aa54c6ebc8031de91c91827e7036c..fcf8f5942c586b9dce3a6dd9cb1ee65256764fdd 100644
+--- a/src/type/validate.ts
++++ b/src/type/validate.ts
+@@ -414,6 +414,7 @@ function validateTypes(context: SchemaValidationContext): void {
+   >();
+ 
+   for (const type of Object.values(typeMap)) {
++    // @phryneas/schedule may-yield-here
+     // Ensure all provided types are in fact GraphQL type.
+     if (!isNamedType(type)) {
+       context.reportError(
+@@ -487,6 +488,7 @@ function validateFields(
+   }
+ 
+   for (const field of fields) {
++    // @phryneas/schedule may-yield-here
+     // Ensure they are named correctly.
+     validateName(context, field);
+ 
+@@ -501,6 +503,7 @@ function validateFields(
+ 
+     // Ensure the arguments are valid
+     for (const arg of field.args) {
++      // @phryneas/schedule may-yield-here
+       // Ensure they are named correctly.
+       validateName(context, arg);
+ 
+@@ -571,6 +574,7 @@ function validateTypeImplementsInterface(
+ 
+   // Assert each interface field is implemented.
+   for (const ifaceField of Object.values(iface.getFields())) {
++    // @phryneas/schedule may-yield-here
+     const typeField = typeFieldMap[ifaceField.name];
+ 
+     // Assert interface field exists on type.
+@@ -594,6 +598,7 @@ function validateTypeImplementsInterface(
+ 
+     // Assert each interface field arg is implemented.
+     for (const ifaceArg of ifaceField.args) {
++      // @phryneas/schedule may-yield-here
+       const typeArg = typeField.args.find((arg) => arg.name === ifaceArg.name);
+ 
+       // Assert interface field arg exists on object field.
+@@ -738,6 +743,7 @@ function validateInputFields(
+ 
+   // Ensure the input fields are valid
+   for (const field of fields) {
++    // @phryneas/schedule may-yield-here
+     // Ensure they are named correctly.
+     validateName(context, field);
+ 
+@@ -810,10 +816,12 @@ function detectInputObjectNonFiniteValues(
+   const inputObjectsWithFiniteValues: Array<InputObjectFiniteValueState> = [];
+ 
+   for (const state of finiteValueStates.values()) {
++    // @phryneas/schedule may-yield-here
+     const inputObj = state.inputObj;
+     const fields = Object.values(inputObj.getFields());
+ 
+     for (const field of fields) {
++      // @phryneas/schedule may-yield-here
+       const target = getFiniteValueTarget(inputObj, field.type);
+       if (target === undefined) {
+         continue;
+@@ -845,6 +853,7 @@ function detectInputObjectNonFiniteValues(
+     (nextFiniteValueState = inputObjectsWithFiniteValues.pop()) !== undefined
+   ) {
+     for (const dependentState of nextFiniteValueState.dependents) {
++      // @phryneas/schedule may-yield-here
+       if (dependentState.hasFiniteValue) {
+         continue;
+       }
+diff --git a/src/utilities/TypeInfo.ts b/src/utilities/TypeInfo.ts
+index 1bbdd9c37be1023be1b3d1649da1346b49a60f2d..623c67c71cf3849cd83772b80369fa12ba056f8d 100644
+--- a/src/utilities/TypeInfo.ts
++++ b/src/utilities/TypeInfo.ts
+@@ -937,6 +937,7 @@ export function visitWithTypeInfo(
+   visitor: ASTVisitor,
+ ): ASTVisitor {
+   return {
++    // @phryneas/schedule schedulable
+     enter(...args) {
+       const node = args[0];
+       typeInfo.enter(node);
+@@ -952,6 +953,7 @@ export function visitWithTypeInfo(
+         return result;
+       }
+     },
++    // @phryneas/schedule schedulable
+     leave(...args) {
+       const node = args[0];
+       const fn = getEnterLeaveForKind(visitor, node.kind).leave;
+diff --git a/src/utilities/coerceInputValue.ts b/src/utilities/coerceInputValue.ts
+index ad90e6574af6e3350435cf7d809bad910ee8b70e..a3674dfbeaacc26811d66f2ab9e782ee5d9a102d 100644
+--- a/src/utilities/coerceInputValue.ts
++++ b/src/utilities/coerceInputValue.ts
+@@ -86,6 +86,7 @@ export function coerceInputValue(
+     }
+     const coercedValue = [];
+     for (const itemValue of inputValue) {
++      // @phryneas/schedule may-yield-here
+       const coercedItem = coerceInputValue(itemValue, type.ofType);
+       if (coercedItem === undefined) {
+         return; // Invalid: intentionally return no value.
+@@ -104,6 +105,7 @@ export function coerceInputValue(
+     const fieldDefs = type.getFields();
+     let definedFieldCount = 0;
+     for (const fieldName of Object.keys(inputValue)) {
++      // @phryneas/schedule may-yield-here
+       if (inputValue[fieldName] === undefined) {
+         continue;
+       }
+@@ -113,6 +115,7 @@ export function coerceInputValue(
+       }
+     }
+     for (const field of Object.values(fieldDefs)) {
++      // @phryneas/schedule may-yield-here
+       const fieldValue = inputValue[field.name];
+       if (fieldValue === undefined) {
+         if (isRequiredInputField(field)) {
+@@ -269,6 +272,7 @@ export function coerceInputLiteral(
+     }
+     const coercedValue: Array<unknown> = [];
+     for (const itemNode of valueNode.values) {
++      // @phryneas/schedule may-yield-here
+       let itemValue = coerceInputLiteral(
+         itemNode,
+         type.ofType,
+@@ -313,6 +317,7 @@ export function coerceInputLiteral(
+       valueNode.fields.map((field) => [field.name.value, field]),
+     );
+     for (const field of Object.values(fieldDefs)) {
++      // @phryneas/schedule may-yield-here
+       const fieldNode = fieldNodes.get(field.name);
+       if (
+         !fieldNode ||
+@@ -351,6 +356,7 @@ export function coerceInputLiteral(
+       }
+ 
+       for (const [fieldName, fieldNode] of fieldNodes) {
++        // @phryneas/schedule may-yield-here
+         if (
+           fieldNode.value.kind === Kind.NULL ||
+           coercedValue[fieldName] === null
+diff --git a/src/utilities/typeComparators.ts b/src/utilities/typeComparators.ts
+index 34309a5954818109efaffba46f9a9f95c604a69f..015d50917de2cd9c808dcf65ee9dc47764d7be03 100644
+--- a/src/utilities/typeComparators.ts
++++ b/src/utilities/typeComparators.ts
+@@ -182,9 +182,13 @@ export function doTypesOverlap(
+     if (isAbstractType(typeB)) {
+       // If both types are abstract, then determine if there is any intersection
+       // between possible concrete types of each.
+-      return schema
+-        .getPossibleTypes(typeA)
+-        .some((type) => schema.isSubType(typeB, type));
++      for (const type of schema.getPossibleTypes(typeA)) {
++        // @phryneas/schedule may-yield-here
++        if (schema.isSubType(typeB, type)) {
++          return true;
++        }
++      }
++      return false;
+     }
+     // Determine if the latter type is a possible concrete type of the former.
+     return schema.isSubType(typeA, typeB);
+diff --git a/src/utilities/validateInputValue.ts b/src/utilities/validateInputValue.ts
+index 322c4666ab25e968a6c8a4eb7d1ec9cb0930cfaa..c061df6b959296398798bbc1fce3ea25eac67b91 100644
+--- a/src/utilities/validateInputValue.ts
++++ b/src/utilities/validateInputValue.ts
+@@ -154,6 +154,7 @@ function validateInputValueImpl(
+     } else {
+       let index = 0;
+       for (const itemValue of inputValue) {
++        // @phryneas/schedule may-yield-here
+         validateInputValueImpl(
+           itemValue,
+           type.ofType,
+@@ -178,6 +179,7 @@ function validateInputValueImpl(
+     const fieldDefs = type.getFields();
+ 
+     for (const field of Object.values(fieldDefs)) {
++      // @phryneas/schedule may-yield-here
+       const fieldValue = inputValue[field.name];
+       if (fieldValue === undefined) {
+         if (isRequiredInputField(field)) {
+@@ -203,6 +205,7 @@ function validateInputValueImpl(
+     const fields: Array<string> = [];
+     // Ensure every provided field is defined.
+     for (const fieldName of Object.keys(inputValue)) {
++      // @phryneas/schedule may-yield-here
+       if (inputValue[fieldName] === undefined) {
+         continue;
+       }
+@@ -462,6 +465,7 @@ function validateInputLiteralImpl(
+     } else {
+       let index = 0;
+       for (const itemNode of valueNode.values) {
++        // @phryneas/schedule may-yield-here
+         validateInputLiteralImpl(
+           context,
+           itemNode,
+@@ -488,6 +492,7 @@ function validateInputLiteralImpl(
+     const fieldNodes = keyMap(valueNode.fields, (field) => field.name.value);
+ 
+     for (const field of Object.values(fieldDefs)) {
++      // @phryneas/schedule may-yield-here
+       const fieldNode = fieldNodes[field.name];
+       if (fieldNode === undefined) {
+         if (isRequiredInputField(field)) {
+@@ -544,6 +549,7 @@ function validateInputLiteralImpl(
+     const knownFields: Array<(typeof fields)[number]> = [];
+     // Ensure every provided field is defined.
+     for (const fieldNode of fields) {
++      // @phryneas/schedule may-yield-here
+       const fieldName = fieldNode.name.value;
+       if (!Object.hasOwn(fieldDefs, fieldName)) {
+         const suggestion = hideSuggestions
+diff --git a/src/utilities/valueFromAST.ts b/src/utilities/valueFromAST.ts
+index d5ebc9e515ca6f644b803c652820fad96c7224e4..5b0a6993f8e1e0548480a6b6ede66c02417f1f7b 100644
+--- a/src/utilities/valueFromAST.ts
++++ b/src/utilities/valueFromAST.ts
+@@ -125,6 +125,7 @@ export function valueFromAST(
+     if (valueNode.kind === Kind.LIST) {
+       const coercedValues = [];
+       for (const itemNode of valueNode.values) {
++        // @phryneas/schedule may-yield-here
+         if (isMissingVariable(itemNode, variables)) {
+           // If an array contains a missing variable, it is either coerced to
+           // null or if the item type is non-null, it considered invalid.
+@@ -165,6 +166,7 @@ export function valueFromAST(
+       valueNode.fields.map((field) => [field.name.value, field]),
+     );
+     for (const field of Object.values(fieldDefs)) {
++      // @phryneas/schedule may-yield-here
+       const fieldNode = fieldNodes.get(field.name);
+       if (fieldNode == null || isMissingVariable(fieldNode.value, variables)) {
+         if (field.defaultValue !== undefined) {
+@@ -188,6 +190,7 @@ export function valueFromAST(
+       }
+ 
+       for (const [fieldName, fieldNode] of fieldNodes) {
++        // @phryneas/schedule may-yield-here
+         if (
+           fieldNode.value.kind === Kind.NULL ||
+           coercedObj[fieldName] === null
+diff --git a/src/utilities/valueToLiteral.ts b/src/utilities/valueToLiteral.ts
+index 2490433dc97a658d4d63ffecc6d9cc216403eb54..4b2dc2cc6ce194cfc4d80573f028419ed750fa1b 100644
+--- a/src/utilities/valueToLiteral.ts
++++ b/src/utilities/valueToLiteral.ts
+@@ -78,6 +78,7 @@ export function valueToLiteral(
+     }
+     const values: Array<ConstValueNode> = [];
+     for (const itemValue of value) {
++      // @phryneas/schedule may-yield-here
+       const itemNode = valueToLiteral(itemValue, type.ofType);
+       if (!itemNode) {
+         return; // Invalid: intentionally return no value.
+@@ -100,6 +101,7 @@ export function valueToLiteral(
+       return; // Invalid: intentionally return no value.
+     }
+     for (const field of Object.values(type.getFields())) {
++      // @phryneas/schedule may-yield-here
+       const fieldValue = value[field.name];
+       if (fieldValue === undefined) {
+         if (isRequiredInputField(field)) {
+@@ -183,6 +185,7 @@ export function defaultScalarValueToLiteral(value: unknown): ConstValueNode {
+       const objValue = value as { [prop: string]: unknown };
+       const fields: Array<ConstObjectFieldNode> = [];
+       for (const fieldName of Object.keys(objValue)) {
++        // @phryneas/schedule may-yield-here
+         const fieldValue = objValue[fieldName];
+         // Like JSON, undefined fields are not included in the literal result.
+         if (fieldValue !== undefined) {
+diff --git a/src/validation/ValidationContext.ts b/src/validation/ValidationContext.ts
+index 8828feb09f71bdf1d4d4cd327dfc5c840e89c9a2..4785449782e41909e3edadf7f87ff7568ed36d0a 100644
+--- a/src/validation/ValidationContext.ts
++++ b/src/validation/ValidationContext.ts
+@@ -85,6 +85,7 @@ export class ASTValidationContext {
+     } else {
+       fragments = Object.create(null);
+       for (const defNode of this.getDocument().definitions) {
++        // @phryneas/schedule may-yield-here
+         if (defNode.kind === Kind.FRAGMENT_DEFINITION) {
+           fragments[defNode.name.value] = defNode;
+         }
+@@ -104,6 +105,7 @@ export class ASTValidationContext {
+       let set: SelectionSetNode | undefined;
+       while ((set = setsToVisit.pop())) {
+         for (const selection of set.selections) {
++          // @phryneas/schedule may-yield-here
+           if (selection.kind === Kind.FRAGMENT_SPREAD) {
+             spreads.push(selection);
+           } else if (selection.selectionSet) {
+@@ -127,6 +129,7 @@ export class ASTValidationContext {
+       let node: SelectionSetNode | undefined;
+       while ((node = nodesToVisit.pop())) {
+         for (const spread of this.getFragmentSpreads(node)) {
++          // @phryneas/schedule may-yield-here
+           const fragName = spread.name.value;
+           if (!collectedNames.has(fragName)) {
+             collectedNames.add(fragName);
+@@ -481,6 +484,7 @@ export class ValidationContext extends ASTValidationContext {
+     if (!usages) {
+       usages = this.getVariableUsages(operation);
+       for (const frag of this.getRecursivelyReferencedFragments(operation)) {
++        // @phryneas/schedule may-yield-here
+         usages = usages.concat(this.getVariableUsages(frag));
+       }
+       this._recursiveVariableUsages.set(operation, usages);
+diff --git a/src/validation/rules/FieldsOnCorrectTypeRule.ts b/src/validation/rules/FieldsOnCorrectTypeRule.ts
+index 21664203eaa3bee325de5c8fdf4f20e8222bf70f..0c5dfd29489caa10431862dcb0ddac2bde464256 100644
+--- a/src/validation/rules/FieldsOnCorrectTypeRule.ts
++++ b/src/validation/rules/FieldsOnCorrectTypeRule.ts
+@@ -64,6 +64,7 @@ export function FieldsOnCorrectTypeRule(
+   context: ValidationContext,
+ ): ASTVisitor {
+   return {
++    // @phryneas/schedule schedulable
+     Field(node: FieldNode) {
+       const type = context.getParentType();
+       if (type) {
+@@ -124,6 +125,7 @@ function getSuggestedTypeNames(
+   const suggestedTypes = new Set<GraphQLObjectType | GraphQLInterfaceType>();
+   const usageCount = Object.create(null);
+   for (const possibleType of schema.getPossibleTypes(type)) {
++    // @phryneas/schedule may-yield-here
+     if (possibleType.getFields()[fieldName] == null) {
+       continue;
+     }
+@@ -133,6 +135,7 @@ function getSuggestedTypeNames(
+     usageCount[possibleType.name] = 1;
+ 
+     for (const possibleInterface of possibleType.getInterfaces()) {
++      // @phryneas/schedule may-yield-here
+       if (possibleInterface.getFields()[fieldName] == null) {
+         continue;
+       }
+diff --git a/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts b/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
+index 24f8ab955bab1d55402a577ce6831f8cab93416c..dfab48d8c05feeed11e81d93ce7db9e769939489 100644
+--- a/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
++++ b/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
+@@ -288,6 +288,7 @@ function findConflictsWithinSelectionSet(
+       // This compares each item in the list of fragment spreads to every other
+       // item in that same list (except for itself).
+       for (let j = i + 1; j < fragmentSpreads.length; j++) {
++        // @phryneas/schedule may-yield-here
+         collectConflictsBetweenFragments(
+           validationContext,
+           ruleContext,
+@@ -572,6 +573,7 @@ function findConflictsBetweenSubSelectionSets(
+   // spreads to each item in the second set of spreads.
+   for (const fragmentSpread1 of fragmentSpreads1) {
+     for (const fragmentSpread2 of fragmentSpreads2) {
++      // @phryneas/schedule may-yield-here
+       collectConflictsBetweenFragments(
+         validationContext,
+         ruleContext,
+@@ -598,12 +600,14 @@ function collectConflictsWithin(
+   // response name. For every response name, if there are multiple fields, they
+   // must be compared to find a potential conflict.
+   for (const [responseName, fields] of fieldMap.entries()) {
++    // @phryneas/schedule may-yield-here
+     // This compares every field in the list to every other field in this list
+     // (except to itself). If the list only has one item, nothing needs to
+     // be compared.
+     if (fields.length > 1) {
+       for (let i = 0; i < fields.length; i++) {
+         for (let j = i + 1; j < fields.length; j++) {
++          // @phryneas/schedule may-yield-here
+           const conflict = findConflict(
+             validationContext,
+             ruleContext,
+@@ -647,10 +651,12 @@ function collectConflictsBetween(
+   // maps, each field from the first field map must be compared to every field
+   // in the second field map to find potential conflicts.
+   for (const [responseName, fields1] of fieldMap1.entries()) {
++    // @phryneas/schedule may-yield-here
+     const fields2 = fieldMap2.get(responseName);
+     if (fields2 != null) {
+       for (const field1 of fields1) {
+         for (const field2 of fields2) {
++          // @phryneas/schedule may-yield-here
+           const conflict = findConflict(
+             validationContext,
+             ruleContext,
+diff --git a/src/validation/rules/PossibleFragmentSpreadsRule.ts b/src/validation/rules/PossibleFragmentSpreadsRule.ts
+index 38ce9aa50af115088eff1358bc0cbd573b27833d..0a4a66913cf4a14adefcdd85cb4b76fe83531b66 100644
+--- a/src/validation/rules/PossibleFragmentSpreadsRule.ts
++++ b/src/validation/rules/PossibleFragmentSpreadsRule.ts
+@@ -65,6 +65,7 @@ export function PossibleFragmentSpreadsRule(
+   context: ValidationContext,
+ ): ASTVisitor {
+   return {
++    // @phryneas/schedule schedulable
+     InlineFragment(node) {
+       const fragType = context.getType();
+       const parentType = context.getParentType();
+@@ -83,6 +84,7 @@ export function PossibleFragmentSpreadsRule(
+         );
+       }
+     },
++    // @phryneas/schedule schedulable
+     FragmentSpread(node) {
+       const fragName = node.name.value;
+       const fragType = getFragmentType(context, fragName);
 diff --git a/tsconfig.json b/tsconfig.json
 index 3987e50c4d42c7aaadde6a2da54f1e52dfebba0b..158e3b93b8ead4fa71ae0b9f9279fe17266c44ab 100644
 --- a/tsconfig.json

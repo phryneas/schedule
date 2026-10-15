@@ -32,6 +32,7 @@ export default function schedulerPlugin(
         const classesWithStaticInitialization = new WeakSet<Types.ClassBody>();
         const hoisted = new Map<NodePath<any>, Types.Statement[]>();
         const localCalls = new WeakSet<Types.CallExpression>();
+        const optedIn = new WeakSet<Types.Node>();
         let used = false;
         let usedCommands = false;
         let usedTypes = false;
@@ -102,7 +103,16 @@ export default function schedulerPlugin(
           },
           Function(path) {
             const info = options.analysis?.functions.get(path.node.end!);
-            if (!eligibleScope(path)) return;
+            const marked = path.node.leadingComments?.some(comment => comment.value.trim() === "@phryneas/schedule schedulable");
+            if (marked) {
+              if (info?.skip || path.node.async || path.node.generator ||
+                  t.isTSTypePredicate((path.node.returnType as Types.TSTypeAnnotation)?.typeAnnotation) ||
+                  ((path.isClassMethod() || path.isObjectMethod()) && path.node.kind !== "method")) {
+                throw path.buildCodeFrameError("schedulable cannot opt an excluded, async, generator, constructor, or accessor function into transformation.");
+              }
+              optedIn.add(path.node);
+            }
+            if (!marked && !eligibleScope(path)) return;
             if (info?.skip || t.isTSTypePredicate((path.node.returnType as Types.TSTypeAnnotation)?.typeAnnotation)) {
               path.skip();
               return;
@@ -469,7 +479,7 @@ export default function schedulerPlugin(
               t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("getSignal")), []), true))]));
           }
           transformCalls(path);
-          if (!hasYield(path)) {
+          if (!hasYield(path) && !optedIn.has(path.node)) {
             path.node.body = originalBody;
             continue;
           }
@@ -739,7 +749,13 @@ export default function schedulerPlugin(
                 wrapped.typeParameters = t.tsTypeParameterInstantiation([explicitSimpleType]);
               }
             }
-            path.replaceWith(wrapped);
+            if (path.isObjectMethod()) {
+              const property = t.objectProperty(clone(path.node.key), wrapped, path.node.computed);
+              preserveComments(property, ...commentSources);
+              path.replaceWith(property);
+            } else {
+              path.replaceWith(wrapped);
+            }
           }
         }
 
