@@ -15,6 +15,7 @@ test("standalone generator overloads preserve published call signatures", async 
   const runtime = join(root, "src/index.ts");
   const output = transformSource(`
     function plain<T>(value: T): T { return value; }
+    export function simple(value: number): number { return plain(value); }
     export function identity<T>(value: T): T { return plain(value); }
     export function nullable(value: null | undefined): void;
     export function nullable(value: string): string;
@@ -43,6 +44,9 @@ test("standalone generator overloads preserve published call signatures", async 
     }
   `, "input.ts", { runtimeModule: runtime });
   assert.match(output, /function\* _pickImpl/);
+  assert.match(output, /simple = _makeSchedulable\(\s*function\*/);
+  assert.match(output, /pick = _makeSchedulable</);
+  assert.match(output, /identity = _makeSchedulable</);
   assert.match(output, /<A extends object, B, C = string>\(\) =>/);
   assert.doesNotMatch(output, /type [ABC] =/);
   assert.doesNotMatch(output, /function\*<A/);
@@ -67,9 +71,12 @@ test("standalone generator overloads preserve published call signatures", async 
   const consumer = join(directory, "consumer.mts");
   await writeFile(consumer, `
     import { expectTypeOf } from "expect-type";
-    import { identity, nullable, pick, Picker } from ${JSON.stringify(declaration.replace(/\.d\.mts$/, ".mjs"))};
+    import { simple, identity, nullable, pick, Picker } from ${JSON.stringify(declaration.replace(/\.d\.mts$/, ".mjs"))};
     import { async, commands, makeSchedulable } from ${JSON.stringify(runtime)};
     import type { SchedulableIterable } from ${JSON.stringify(runtime)};
+    expectTypeOf(simple(1)).toEqualTypeOf<number>();
+    expectTypeOf(async(simple)(1)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(commands.execute(simple)(1)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf([1, 2, 3].map(identity)).toEqualTypeOf<number[]>();
     expectTypeOf(async(identity)(42)).toEqualTypeOf<Promise<number>>();
     expectTypeOf(nullable(null)).toEqualTypeOf<void>();

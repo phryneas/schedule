@@ -244,10 +244,13 @@ export default function schedulerPlugin(
           used = true;
           const call = t.callExpression(clone(make), [generator]);
           if (original.returnType || original.typeParameters || overloads.length) {
+            usedTypes = true;
             const sigs = overloads.length ? overloads : [original];
-            call.typeParameters = t.tsTypeParameterInstantiation([
-              fullSignature(sigs),
-            ]);
+            if (overloads.length || sigs.some(node => node.typeParameters?.params.length)) {
+              call.typeParameters = t.tsTypeParameterInstantiation([
+                fullSignature(sigs),
+              ]);
+            }
             let implementationResult = resultType(original);
             const containsVoid = (type: Types.TSType): boolean => t.isTSVoidKeyword(type)
               || t.isTSUnionType(type) && type.types.some(containsVoid);
