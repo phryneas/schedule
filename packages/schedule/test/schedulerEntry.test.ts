@@ -24,8 +24,7 @@ test("nested scheduler calls do not change the outer signal", async () => {
     yield* syncAware({
       sync: check,
       async: async () => { assert.equal(await async(child)(), 42); },
-      args: [],
-    });
+    })();
     assert.equal(yield* getSignal(), signal);
   });
 

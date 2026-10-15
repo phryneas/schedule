@@ -30,8 +30,7 @@ test("async syncAware callbacks use a signal captured by the generator", async (
         assert.equal(signal.aborted, true);
         assert.throws(() => signal.throwIfAborted(), { name: "AbortError" });
       },
-      args: [],
-    });
+    })();
   });
 
   work();

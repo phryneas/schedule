@@ -33,8 +33,7 @@ for (const scheduler of [sync, async]) {
         yield* commands.syncAware({
           sync() { throw undefined; },
           async async() { throw undefined; },
-          args: [],
-        });
+        })();
       } catch (caught) {
         assert.equal(caught, undefined);
         return "caught";

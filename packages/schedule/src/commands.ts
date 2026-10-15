@@ -87,15 +87,15 @@ export function execute(
 export const syncAware = <Ret, Args extends Array<unknown>, ThisArg>(options: {
   sync: (this: ThisArg, ...args: Args) => Ret;
   async: (this: ThisArg, ...args: Args) => Promise<Ret>;
-  args: Args;
-  this?: ThisArg;
   startImmediately?: boolean;
-}): SchedulableIterable<Ret> => {
-  return (function* executeCommand(): Generator<Command, Ret> {
+}): (this: ThisArg, ...args: Args) => SchedulableIterable<Ret> => {
+  return function* executeCommand(this: ThisArg, ...args: Args): Generator<Command, Ret> {
     const result = yield {
       kind: "syncAware" as const,
       ...(options as any),
+      args,
+      this: this,
     };
     return result as Ret;
-  })();
+  };
 };

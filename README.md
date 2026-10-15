@@ -86,10 +86,13 @@ const sumBatches = makeSchedulable(function* sumBatches(
 Ordinary functions and callbacks also work, but run uninterrupted once called.
 For methods, bind the receiver: `yield* commands.execute(object.method).bind(object)(arg)`.
 
-### `commands.syncAware({ sync, async, args })`
+### `commands.syncAware({ sync, async })(...args)`
 
 Call an external dependency's synchronous or promise-returning implementation,
 depending on how your function is run, and get its result.
+
+The returned wrapper can be reused across calls and schedulers. Use `.call` or
+`.bind` when the implementations need a receiver.
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -107,8 +110,7 @@ const sumFile = makeSchedulable(function* sumFile(
   const contents = yield* commands.syncAware({
     sync: (file: string) => readFileSync(file, "utf8"),
     async: (file: string) => readFile(file, "utf8"),
-    args: [filePath],
-  });
+  })(filePath);
 
   let total = 0;
   for (const line of contents.split(/\r?\n/)) {
