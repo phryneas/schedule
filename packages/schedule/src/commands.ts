@@ -4,6 +4,7 @@ import type {
   ScheduleSignal,
 } from "./types.ts";
 import type { schedulableImplementationSignal } from "./internal.ts";
+import { SingleCommand } from "./singleCommand.ts";
 import type {
   HasMultipleSignatures,
   MapResults,
@@ -33,22 +34,26 @@ export type Command =
       startImmediately?: boolean;
     };
 
-export function* yieldNow(): SchedulableIterable<void> {
-  yield { kind: "yield" };
+const yieldCmd = { kind: "yield" } as const;
+export function yieldNow(): SchedulableIterable<void> {
+  return new SingleCommand(yieldCmd);
 }
 
-export function* getSignal(): SchedulableIterable<ScheduleSignal> {
-  return (yield { kind: "getSignal" }) as ScheduleSignal;
+const getSignalCmd = { kind: "getSignal" } as const;
+export function getSignal(): SchedulableIterable<ScheduleSignal> {
+  return new SingleCommand(getSignalCmd);
 }
 
 export function execute<Fn extends (...args: any[]) => unknown>(
   fn: HasMultipleSignatures<Fn> extends true
     ? Fn
     : Fn extends SchedulableMarker<
-        (...args: any[]) => SchedulableIterable<unknown>,
-        any,
-        any
-      > ? Fn : never,
+          (...args: any[]) => SchedulableIterable<unknown>,
+          any,
+          any
+        >
+      ? Fn
+      : never,
   startImmediately?: boolean,
 ): Fn extends SchedulableMarker<
   (...args: any[]) => SchedulableIterable<unknown>,
@@ -65,22 +70,18 @@ export function execute(
   fn: Function,
   startImmediately?: boolean,
 ): (this: unknown, ...args: any[]) => SchedulableIterable<any>;
-export function execute(
-  fn: Function,
-  startImmediately = false,
-) {
-  return function* executeCommand(
+export function execute(fn: Function, startImmediately = false) {
+  return function executeCommand(
     this: unknown,
     ...args: unknown[]
   ): SchedulableIterable<unknown> {
-    const result = yield {
-      kind: "execute" as const,
+    return new SingleCommand({
+      kind: "execute",
       fn: fn as any,
       args,
       this: this,
       startImmediately,
-    };
-    return result;
+    });
   };
 }
 
@@ -88,14 +89,16 @@ export const syncAware = <Ret, Args extends Array<unknown>, ThisArg>(options: {
   sync: (this: ThisArg, ...args: Args) => Ret;
   async: (this: ThisArg, ...args: Args) => Promise<Ret>;
   startImmediately?: boolean;
-}): (this: ThisArg, ...args: Args) => SchedulableIterable<Ret> => {
-  return function* executeCommand(this: ThisArg, ...args: Args): Generator<Command, Ret> {
-    const result = yield {
+}): ((this: ThisArg, ...args: Args) => SchedulableIterable<Ret>) => {
+  return function executeCommand(
+    this: ThisArg,
+    ...args: Args
+  ): SchedulableIterable<Ret> {
+    return new SingleCommand<Ret>({
       kind: "syncAware" as const,
       ...(options as any),
       args,
       this: this,
-    };
-    return result as Ret;
+    });
   };
 };

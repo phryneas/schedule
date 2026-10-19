@@ -1,7 +1,7 @@
 import { matchesGlob, relative } from "node:path";
 import { NodeBuilderFlags, SignatureKind, SymbolFlags } from "typescript/unstable/sync";
 import type { Project, Signature } from "typescript/unstable/sync";
-import { SyntaxKind, isCallExpression, isFunctionDeclaration, isFunctionExpression, isArrowFunction, isMethodDeclaration, isClassDeclaration, isVariableDeclaration, isPropertyDeclaration, isPropertyAssignment, isPropertyAccessExpression, isNewExpression } from "typescript/unstable/ast";
+import { SyntaxKind, isCallExpression, isCallSignatureDeclaration, isFunctionTypeNode, isFunctionDeclaration, isFunctionExpression, isArrowFunction, isMethodDeclaration, isClassDeclaration, isVariableDeclaration, isPropertyDeclaration, isPropertyAssignment, isPropertyAccessExpression, isNewExpression } from "typescript/unstable/ast";
 import type { Node, SourceFile } from "typescript/unstable/ast";
 
 export interface Exclusion {
@@ -13,7 +13,7 @@ export interface Exclusion {
 
 export interface SourceAnalysis {
   functions: Map<number, { skip: boolean; signature?: string }>;
-  calls: Map<number, { direct: boolean; targets?: { file: string; end: number }[] }>;
+  calls: Map<number, { direct: boolean; hasCommand?: boolean; targets?: { file: string; end: number }[] }>;
   constructors: Map<number, string>;
   transformed?: Set<number>;
   commandTargets?: Map<string, Set<number>>;
@@ -54,9 +54,13 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
         declaration = sig?.declaration?.resolve();
       }
       const file = declaration?.getSourceFile();
+      // A callable interface/type describes a callback, not an external
+      // implementation. In particular, narrowing to SchedulableFunction must
+      // not turn a scheduled callback into a synchronous call.
+      const callableType = !!declaration && (isCallSignatureDeclaration(declaration) || isFunctionTypeNode(declaration));
       let direct = !!signature && !!checker.getTypePredicateOfSignature(signature)
         || !!declaration && excluded(declaration)
-        || !!file && (file.isDeclarationFile || relative(root, file.fileName).startsWith(".."));
+        || !callableType && !!file && (file.isDeclarationFile || relative(root, file.fileName).startsWith(".."));
       const callee = indirect && isPropertyAccessExpression(node.expression)
         ? node.expression.expression : node.expression;
       let symbol = checker.getSymbolAtLocation(callee);
@@ -75,7 +79,10 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
         return node && (isFunctionDeclaration(node) || isMethodDeclaration(node) || isFunctionExpression(node) || isArrowFunction(node))
           ? { file: node.getSourceFile().fileName, end: node.end } : undefined;
       });
-      result.calls.set(node.end, { direct, ...(targets.length && targets.every(target => !!target) ? { targets } : {}) });
+      const calleeType = checker.getTypeAtLocation(callee);
+      const commandProperty = calleeType && checker.getPropertyOfType(calleeType, "command");
+      const hasCommand = !!commandProperty && !(commandProperty.flags & SymbolFlags.Optional);
+      result.calls.set(node.end, { direct, hasCommand, ...(targets.length && targets.every(target => !!target) ? { targets } : {}) });
     }
     if (isNewExpression(node) && !node.typeArguments?.length) {
       const type = checker.getTypeAtLocation(node);

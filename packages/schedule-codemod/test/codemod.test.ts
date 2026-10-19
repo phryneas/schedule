@@ -22,6 +22,47 @@ async function load(source: string) {
   return import(`data:text/javascript;base64,${Buffer.from(transform(source)).toString("base64")}`);
 }
 
+test("dynamic ordinary calls keep a deadline boundary and evaluate calls conditionally", async () => {
+  const module = await load(`
+    export function run(object, argument, enabled) {
+      return enabled && object.method(argument());
+    }
+  `);
+  const events: string[] = [];
+  const object = {
+    value: 7,
+    get method() {
+      events.push("get");
+      return function (this: { value: number }, n: number) {
+        events.push("call");
+        return this.value + n;
+      };
+    },
+  };
+  const argument = () => { events.push("argument"); return 3; };
+  let expired = true;
+  const signal = {
+    aborted: false, throwIfAborted() {},
+    get shouldYield() { return expired; },
+    bump() { expired = false; events.push("yielded"); },
+  };
+  assert.equal(await scheduled(module.run, signal)(object, argument, false), false);
+  assert.deepEqual(events, []);
+  const pending = scheduled(module.run, signal)(object, argument, true);
+  assert.deepEqual(events, []);
+  assert.equal(await pending, 10);
+  assert.deepEqual(events, ["yielded", "get", "argument", "call"]);
+});
+
+test("dynamic calls accept ordinary functions with unrelated command properties", async () => {
+  const module = await load(`export function run(callback) { return callback(3); }`);
+  const callback = Object.assign((n: number) => n + 1, {
+    command() { assert.fail("not a schedulable implementation"); },
+  });
+  assert.equal(module.run(callback), 4);
+  assert.equal(await scheduled(module.run)(callback), 4);
+});
+
 test("plugin preserves function hoisting and schedules local calls", async () => {
   const output = transform(`
     export const initial = twice(3);
@@ -120,8 +161,10 @@ test("stable receivers bind directly while getter-mutated bindings keep their re
     export function own() { return this.read(); }
   `);
   assert.doesNotMatch(stable, /_receiver/);
-  assert.match(stable, /execute\(schema.read\)\.bind\(schema\)/);
-  assert.match(stable, /execute\(this.read\)\.bind\(this\)/);
+  assert.match(stable, /_callee\d* = schema.read/);
+  assert.match(stable, /execute\(_callee\d*\)\.bind\(schema\)/);
+  assert.match(stable, /_callee\d* = this.read/);
+  assert.match(stable, /execute\(_callee\d*\)\.bind\(this\)/);
   const module = await load(`
     export function run() {
       let receiver = {

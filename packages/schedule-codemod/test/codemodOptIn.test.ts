@@ -39,3 +39,20 @@ test("opt-in rejects unsupported functions", () => {
     };`, "fixture.ts"), /schedulable cannot opt/);
   }
 });
+
+test("opted-in local declarations are initialized before early returns and calls", () => {
+  const result = transformSource(`export function factory() {
+    const value = 42;
+    run();
+    return /* @phryneas/schedule schedulable */ function callback() {
+      return run();
+    };
+    // @phryneas/schedule schedulable
+    function run() {
+      // @phryneas/schedule may-yield-here
+      return value;
+    }
+  }`, "fixture.ts");
+  assert.ok(result.indexOf("var run") < result.indexOf("const value"), result);
+  assert.match(result, /return .*_makeSchedulable(?:<[^>]*>)?\(function\*/s);
+});

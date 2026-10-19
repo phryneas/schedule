@@ -3,7 +3,65 @@ import test from "node:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { transformProject } from "../src/index.ts";
+import { async as scheduled, commands, makeSchedulable } from "../../schedule/src/index.ts";
+
+test("dynamic dispatch keeps callable signatures in both branches", () => {
+  const result = spawnSync(resolve("../../node_modules/.bin/tsc"), [
+    "--ignoreConfig", "--noEmit", "--strict", "--target", "esnext", "--module", "nodenext",
+    "--allowImportingTsExtensions", resolve("test/dynamicDispatch.types.ts"),
+  ], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});
+
+test("a guarded callback stays schedulable while the synchronous branch stays direct", async t => {
+  const root = resolve("../..");
+  await mkdir(join(root, ".tmp"), { recursive: true });
+  const directory = await mkdtemp(join(root, ".tmp/guarded-callback-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const source = join(directory, "source");
+  const output = join(directory, "output");
+  await mkdir(source);
+  const config = join(directory, "tsconfig.json");
+  const runtime = join(root, "packages/schedule/src/index.ts");
+  await writeFile(config, JSON.stringify({ compilerOptions: {
+    strict: true, target: "esnext", module: "nodenext", allowImportingTsExtensions: true, noEmit: true,
+  }, include: ["source/*.ts"] }));
+  await writeFile(join(source, "input.ts"), `
+import { isSchedulableFunction } from ${JSON.stringify(join(root, "packages/schedule/src/isSchedulableFunction.ts"))};
+export function run(fn: (this: { value: number }) => number, receiver: { value: number }): number {
+  // @phryneas/schedule may-yield-here
+  if (isSchedulableFunction<number, []>(fn)) return fn.call(receiver);
+  // @phryneas/schedule synchronous
+  return fn.call(receiver);
+}
+`);
+  await transformProject({ tsconfig: config, sourceDirectory: source, outputDirectory: output, runtimeModule: runtime });
+  const generated = join(output, "input.ts");
+  const text = await readFile(generated, "utf8");
+  assert.match(text, /yield\* _commands.execute\(fn\).bind\(receiver\)\(\)/);
+  assert.match(text, /return fn.call\(receiver\)/);
+  const compilation = spawnSync(join(root, "node_modules/.bin/tsc"), [
+    "--ignoreConfig", "--noEmit", "--strict", "--target", "esnext", "--module", "nodenext", "--allowImportingTsExtensions", generated,
+  ], { encoding: "utf8" });
+  assert.equal(compilation.status, 0, compilation.stdout + compilation.stderr);
+  const { run } = await import(pathToFileURL(generated).href);
+  const signal = { shouldYield: false, aborted: false, throwIfAborted() {}, bump() {} };
+  const callback = makeSchedulable(function* (this: { value: number }) {
+    assert.equal(yield* commands.getSignal(), signal);
+    yield* commands.yieldNow();
+    return this.value;
+  });
+  let finished = false;
+  const pending = scheduled(run, signal)(callback, { value: 42 }).then((value: unknown) => { finished = true; return value; });
+  await Promise.resolve();
+  assert.equal(finished, false);
+  assert.equal(await pending, 42);
+  function plain(this: { value: number }) { return this.value; }
+  assert.equal(run(plain, { value: 7 }), 7);
+  assert.equal(await scheduled(run)(plain, { value: 8 }), 8);
+});
 
 test("inferred return types survive direct and mutual recursion", async t => {
   const root = resolve("../..");
@@ -108,8 +166,8 @@ export function unionUnknown(worker: Worker | { run(value: number): number }): n
   assert.match(callee, /export function chain2\(value: number\): number \{ return chain\(value\); \}/);
   assert.match(text, /unionScheduled[^]*?worker.run.command.bind\(worker\)\(1\)/);
   assert.match(text, /export function unionPlain[^]*?return worker.plain\(1\);/);
-  assert.match(text, /unionMixed[^]*?_commands.execute\(worker.run\).bind\(worker\)\(1\)/);
-  assert.match(text, /unionUnknown[^]*?_commands.execute\(worker.run\).bind\(worker\)\(1\)/);
+  assert.match(text, /unionMixed[^]*?_callee\d* = worker.run[^]*?_commands.execute\(_callee\d*\).bind\(worker\)\(1\)/);
+  assert.match(text, /unionUnknown[^]*?_callee\d* = worker.run[^]*?_commands.execute\(_callee\d*\).bind\(worker\)\(1\)/);
   assert.match(text, /export function builtin/);
   assert.match(text, /return processRef.getBuiltinModule\('node:diagnostics_channel'\)/);
   const result = spawnSync(join(root, "node_modules/.bin/tsc"), [

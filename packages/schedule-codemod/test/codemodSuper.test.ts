@@ -26,8 +26,9 @@ test("super calls select the superclass method and preserve the current receiver
       static override add(amount: number): number { return super.add(amount) + 2; }
     }
   `, "fixture.ts", { runtimeModule: join(root, "packages/schedule/src/index.ts") });
-  assert.match(output, /execute\(Base\.prototype\.add\)\.bind\(this\)/);
-  assert.match(output, /execute\(Base\.add\)\.bind\(this\)/);
+  assert.match(output, /_callee\d* = Base\.prototype\.add/);
+  assert.match(output, /_callee\d* = Base\.add/);
+  assert.match(output, /execute\(_callee\d*\)\.bind\(this\)/);
   assert.doesNotMatch(output, /_makeSchedulable</);
   assert.match(output, /declare add:/);
   assert.match(output, /declare static add:/);

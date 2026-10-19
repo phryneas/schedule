@@ -33,8 +33,10 @@ export default function schedulerPlugin(
         const hoisted = new Map<NodePath<any>, Types.Statement[]>();
         const localCalls = new WeakSet<Types.CallExpression>();
         const optedIn = new WeakSet<Types.Node>();
+        const synchronousCalls = new WeakSet<Types.Node>();
         let used = false;
         let usedCommands = false;
+        let usedRuntimeMarker = false;
         let usedTypes = false;
         let usedMethodType = false;
         let usedFunctionType = false;
@@ -133,6 +135,29 @@ export default function schedulerPlugin(
             for (const comment of node[key] ?? []) comments.add(comment);
           }
         });
+        for (const comment of comments) {
+          if (comment.value.trim() !== "@phryneas/schedule synchronous") continue;
+          let target: Types.Node | undefined;
+          program.traverse({
+            "CallExpression|OptionalCallExpression"(call: NodePath<any>) {
+              let owner: NodePath<any> = call;
+              if (owner.parentPath?.isAssignmentExpression() && owner.key === "right") owner = owner.parentPath;
+              if (owner.parentPath?.isReturnStatement() || owner.parentPath?.isExpressionStatement()) owner = owner.parentPath;
+              else if (owner.parentPath?.isVariableDeclarator() && owner.key === "init" &&
+                       owner.parentPath.parentPath?.isVariableDeclaration() && owner.parentPath.parentPath.node.declarations.length === 1) {
+                owner = owner.parentPath.parentPath;
+              }
+              if ([call.node, owner.node].some(node => node.leadingComments?.some((c: Types.Comment) =>
+                c.start === comment.start && c.end === comment.end))) {
+                target = call.node;
+              }
+            },
+          });
+          if (!target) {
+            throw program.buildCodeFrameError("synchronous must immediately precede a call or a return, assignment, or single-variable declaration whose value is a call.");
+          }
+          synchronousCalls.add(target);
+        }
         const markers = [...comments].filter(comment =>
           comment.type === "CommentLine" && comment.value.trim() === "@phryneas/schedule may-yield-here");
         for (const comment of markers) {
@@ -317,7 +342,8 @@ export default function schedulerPlugin(
           return call;
         }
 
-        function transformCalls(path: NodePath<any>) {
+        function transformCalls(path: NodePath<any>, signal?: Types.Identifier) {
+          const hadSignal = !!signal;
           const body = path.get("body") as NodePath;
           const directSuperCalls: NodePath<Types.CallExpression>[] = [];
           let processingDirectSuper = false;
@@ -330,7 +356,7 @@ export default function schedulerPlugin(
                 const node = call.node;
                 const info = options.analysis?.calls.get(node.end!);
                 const cached = info?.targets?.every(target => options.analysis?.commandTargets?.get(target.file)?.has(target.end));
-                const direct = info?.direct || !!(info?.targets && options.analysis?.commandTargets &&
+                const direct = synchronousCalls.has(node) || info?.direct || !!(info?.targets && options.analysis?.commandTargets &&
                   info.targets.every(target => !options.analysis!.commandTargets!.get(target.file)?.has(target.end)));
                 const superMethod = t.isMemberExpression(node.callee) && t.isSuper(node.callee.object);
                 if (direct && superMethod && !processingDirectSuper) {
@@ -390,7 +416,22 @@ export default function schedulerPlugin(
                     }
                   }
                 }
+                const dynamic = !direct && !cached && !info?.hasCommand;
                 if (!direct && !cached) usedCommands = true;
+                if (dynamic) {
+                  usedRuntimeMarker = true;
+                  usedCommands = true;
+                  signal ??= path.scope.generateUidIdentifier("signal");
+                  before.unshift(t.logicalExpression("&&",
+                    t.memberExpression(clone(signal), t.identifier("shouldYield")),
+                    t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("yieldNow")), []), true)));
+                  if (!t.isIdentifier(fn)) {
+                    const target = path.scope.generateUidIdentifier("callee");
+                    path.scope.push({ id: clone(target), kind: "let" });
+                    before.push(t.assignmentExpression("=", clone(target), fn));
+                    fn = clone(target);
+                  }
+                }
                 let factory: Types.Expression = direct ? fn : cached
                   ? t.memberExpression(fn, t.identifier("command"))
                   : t.callExpression(t.memberExpression(clone(commands), t.identifier("execute")), [fn]);
@@ -399,7 +440,21 @@ export default function schedulerPlugin(
                   ? t.callExpression(t.memberExpression(factory, t.identifier("apply")), [receiver, applyArgs])
                   : t.callExpression(factory, args);
                 if (node.typeParameters && !applyArgs) command.typeParameters = clone(node.typeParameters);
-                const delegated = direct ? command : t.yieldExpression(command, true);
+                let delegated: Types.Expression = direct ? command : t.yieldExpression(command, true);
+                if (dynamic) {
+                  const scheduled = path.scope.generateUidIdentifier("scheduled");
+                  path.scope.push({ id: clone(scheduled), kind: "let" });
+                  // A mutable boolean keeps the callable's original type in both
+                  // branches, including unions and functions transformed later.
+                  before.push(t.assignmentExpression("=", clone(scheduled), t.binaryExpression("in", clone(marker), clone(fn))));
+                  let ordinaryFactory = clone(fn);
+                  if (hasReceiver && !applyArgs) ordinaryFactory = t.callExpression(t.memberExpression(ordinaryFactory, t.identifier("bind")), [clone(receiver)]);
+                  const ordinary = applyArgs
+                    ? t.callExpression(t.memberExpression(ordinaryFactory, t.identifier("apply")), [clone(receiver), clone(applyArgs)])
+                    : t.callExpression(ordinaryFactory, args.map(clone));
+                  if (node.typeParameters && !applyArgs) ordinary.typeParameters = clone(node.typeParameters);
+                  delegated = t.conditionalExpression(clone(scheduled), delegated, ordinary);
+                }
                 call.replaceWith(before.length ? t.sequenceExpression([...before, delegated]) : delegated);
                 call.skip();
               },
@@ -407,7 +462,7 @@ export default function schedulerPlugin(
             OptionalCallExpression(call: NodePath<Types.OptionalCallExpression>) {
               const node = call.node;
               const info = options.analysis?.calls.get(node.end!);
-              if (info?.direct || (info?.targets && options.analysis?.commandTargets &&
+              if (synchronousCalls.has(node) || info?.direct || (info?.targets && options.analysis?.commandTargets &&
                 info.targets.every(target => !options.analysis!.commandTargets!.get(target.file)?.has(target.end)))) return;
               const target = path.scope.generateUidIdentifier("optional");
               path.scope.push({ id: clone(target), kind: "let" });
@@ -455,6 +510,8 @@ export default function schedulerPlugin(
             processingDirectSuper = true;
             for (const call of directSuperCalls) visitor.CallExpression.exit(call);
           }
+          if (signal && !hadSignal) path.node.body.body.unshift(t.variableDeclaration("const", [t.variableDeclarator(clone(signal),
+            t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("getSignal")), []), true))]));
         }
 
         for (const path of functions.reverse()) {
@@ -465,9 +522,10 @@ export default function schedulerPlugin(
             path.get("body").replaceWith(t.blockStatement([t.returnStatement(originalBody)]));
           }
           const checkpoints = directives.get(path);
+          let signal: Types.Identifier | undefined;
           if (checkpoints) {
             usedCommands = true;
-            const signal = path.scope.generateUidIdentifier("signal");
+            signal = path.scope.generateUidIdentifier("signal");
             for (const { block, comment } of [...checkpoints].reverse()) {
               const check = t.ifStatement(t.memberExpression(clone(signal), t.identifier("shouldYield")), t.blockStatement([
                 t.expressionStatement(t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("yieldNow")), []), true)),
@@ -478,7 +536,7 @@ export default function schedulerPlugin(
             path.node.body.body.unshift(t.variableDeclaration("const", [t.variableDeclarator(clone(signal),
               t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("getSignal")), []), true))]));
           }
-          transformCalls(path);
+          transformCalls(path, signal);
           if (!hasYield(path) && !optedIn.has(path.node)) {
             path.node.body = originalBody;
             continue;
@@ -591,17 +649,20 @@ export default function schedulerPlugin(
             const exported = path.parentPath.isExportDeclaration();
             const statement = exported ? path.parentPath : path;
             const container = statement.parentPath!;
+            // Opted-in local declarations can be called before their definition,
+            // including from callbacks returned before that definition.
+            const hoist = needsHoisting || !container.isProgram();
             const declaration = t.variableDeclaration("var", [t.variableDeclarator(clone(name), wrapped)]);
             if (explicitSimpleType) {
               (declaration.declarations[0]!.id as Types.Identifier).typeAnnotation = t.tsTypeAnnotation(explicitSimpleType);
             }
-            if (needsHoisting || !statement.isExportNamedDeclaration()) {
+            if (hoist || !statement.isExportNamedDeclaration()) {
               preserveComments(declaration, ...commentSources);
             }
             // The comments move with the declaration. Do not let Babel also
             // attach them to an untouched neighboring statement when removing it.
             t.removeComments(statement.node);
-            if (needsHoisting) {
+            if (hoist) {
               const list = hoisted.get(container) ?? [];
               list.unshift(...implementations, declaration);
               hoisted.set(container, list);
@@ -776,12 +837,13 @@ export default function schedulerPlugin(
           program.unshiftContainer("body", t.importDeclaration([
             t.importSpecifier(clone(make), t.identifier("makeSchedulable")),
             ...(usedCommands ? [t.importSpecifier(clone(commands), t.identifier("commands"))] : []),
+            ...(usedRuntimeMarker ? [t.importSpecifier(clone(marker), t.identifier("schedulableImplementationSignal"))] : []),
           ], t.stringLiteral(options.runtimeModule ?? "@phryneas/schedule")));
         }
         if (usedTypes) {
           const declaration = t.importDeclaration([
             t.importSpecifier(clone(iterable), t.identifier("SchedulableIterable")),
-            t.importSpecifier(clone(marker), t.identifier("schedulableImplementationSignal")),
+            ...(!usedRuntimeMarker ? [t.importSpecifier(clone(marker), t.identifier("schedulableImplementationSignal"))] : []),
             ...(usedMethodType ? [t.importSpecifier(clone(methodType), t.identifier("SchedulableMethod"))] : []),
             ...(usedFunctionType ? [t.importSpecifier(clone(functionType), t.identifier("SchedulableFunction"))] : []),
           ], t.stringLiteral(options.runtimeModule ?? "@phryneas/schedule"));

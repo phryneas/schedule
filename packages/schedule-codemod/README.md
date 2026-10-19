@@ -57,3 +57,21 @@ This forces wrapping even without a yield and enables normal call rewriting
 inside that function. Use `may-yield-here` separately for loop checkpoints.
 Async functions, existing generators, constructors, accessors, type guards,
 and configured exclusions still cannot be opted in.
+
+Use `// @phryneas/schedule synchronous` immediately before a call, or a
+return, assignment, or single-variable declaration whose value is a call, to
+preserve that invocation without scheduling it:
+
+```ts
+// @phryneas/schedule synchronous
+const result = callback.apply(visitor, args);
+```
+
+Only that invocation is excluded; calls in its arguments can still be scheduled.
+Keep loop checkpoints around repeated synchronous calls. The marker does not
+make a long-running callback interruptible.
+
+Dynamic calls check the scheduling deadline before dispatch. Ordinary callbacks
+are called directly; callbacks with the `schedulableImplementationSignal` marker go through
+`commands.execute`, which checks whether they are schedulable. Known ordinary
+and schedulable targets retain their direct and `.command` calls respectively.

@@ -24,6 +24,7 @@ export function async<
 function executeIterableAsync<T>(
   iterable: SchedulableIterable<T>,
   abortSignal?: AbortSignal | ScheduleSignal,
+  initialResult?: IteratorResult<Command, T>,
 ): Promise<T> {
   let scheduleSignal: ScheduleSignal;
   if (abortSignal && "shouldYield" in abortSignal) {
@@ -66,11 +67,12 @@ function executeIterableAsync<T>(
   });
 
   async function* iterate(): AsyncGenerator<void, T> {
-    const iterator = iterable[Symbol.iterator]();
+    const iterator = initialResult ? iterable : iterable[Symbol.iterator]();
     let nextArg: unknown;
     let throwing = false;
     do {
-      const result: IteratorResult<Command, T> = throwing ? iterator.throw(nextArg) : iterator.next(nextArg);
+      const result: IteratorResult<Command, T> = initialResult ?? (throwing ? iterator.throw(nextArg) : iterator.next(nextArg));
+      initialResult = undefined;
       throwing = false;
       nextArg = undefined;
       if (result.done) {
@@ -97,12 +99,19 @@ function executeIterableAsync<T>(
             scheduleSignal.bump();
           }
           if (isSchedulableFunction(fn)) {
-            nextArg = await executeIterableAsync(
-              fn[schedulableImplementationSignal].apply(thisArg, args),
-              scheduleSignal,
-            );
-            // we are just back from an async call, so we don't need to yield again for a while
-            scheduleSignal.bump();
+            const child = fn[schedulableImplementationSignal]
+              .apply(thisArg, args)[Symbol.iterator]();
+            const first = child.next();
+            if (first.done) {
+              const value = first.value;
+              // Let await assimilate possible thenables without reading `then`
+              // ourselves: getters must be read only once.
+              nextArg = value !== null && (typeof value === "object" || typeof value === "function")
+                ? await value
+                : value;
+            } else {
+              nextArg = await executeIterableAsync(child, scheduleSignal, first);
+            }
           } else {
             nextArg = fn.apply(thisArg, args);
           }
@@ -116,8 +125,6 @@ function executeIterableAsync<T>(
             scheduleSignal.bump();
           }
           nextArg = await async.apply(thisArg, args);
-          // we are just back from an async call, so we don't need to yield again for a while
-          scheduleSignal.bump();
           continue;
         }
         }

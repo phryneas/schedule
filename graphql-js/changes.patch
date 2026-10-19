@@ -397,6 +397,76 @@ index caae33ae6e671689270c1382309e7717dce14b2c..48e4af01014a2511f4090cdd5720c1b2
      array[i] = str.charCodeAt(i);
    }
    return array;
+diff --git a/src/language/__tests__/visitor-test.ts b/src/language/__tests__/visitor-test.ts
+index f6f05199a057ce2a245fef6be90833e2b3f23ca9..1d0b405657d3ac1c87091dfa9c131d21596ee6f4 100644
+--- a/src/language/__tests__/visitor-test.ts
++++ b/src/language/__tests__/visitor-test.ts
+@@ -1,5 +1,10 @@
+ import { describe, it } from 'node:test';
+ 
++import {
++  async as scheduled,
++  commands,
++  makeSchedulable,
++} from '@phryneas/schedule';
+ import { expect } from 'chai';
+ 
+ import { kitchenSinkQuery } from '../../__testUtils__/kitchenSinkQuery.ts';
+@@ -57,6 +62,54 @@ function getValue(node: ASTNode) {
+ }
+ 
+ describe('Visitor', () => {
++  it('preserves ordinary callbacks with an unrelated command property', () => {
++    const ast = parse('{ a }');
++    const names: Array<string> = [];
++    const visitor: ASTVisitor = {
++      Name: Object.assign(
++        function (this: ASTVisitor, node: ASTNode) {
++          expect(this).to.equal(visitor);
++          if (node.kind === Kind.NAME) names.push(node.value);
++        },
++        {
++          command() {
++            throw new Error('Not a scheduler command');
++          },
++        },
++      ),
++    };
++    visit(ast, visitor);
++    visit(ast, visitInParallel([visitor]));
++    expect(names).to.deep.equal(['a', 'a']);
++  });
++
++  it('retains the scheduler signal and receiver through visitor dispatch', async () => {
++    const ast = parse('{ a }');
++    const signal = {
++      shouldYield: false,
++      aborted: false,
++      throwIfAborted() {},
++      bump() {},
++    };
++    const names: Array<string> = [];
++    const visitor: ASTVisitor = {
++      Name: makeSchedulable(function* (this: ASTVisitor, node: ASTNode) {
++        expect(this).to.equal(visitor);
++        const currentSignal = yield* commands.getSignal();
++        if ('command' in visit) expect(currentSignal).to.equal(signal);
++        yield* commands.yieldNow();
++        if (node.kind === Kind.NAME) names.push(node.value);
++      }),
++    };
++    for (const callbacks of [visitor, visitInParallel([visitor])]) {
++      const run = makeSchedulable(function* () {
++        return yield* commands.execute(visit)(ast, callbacks);
++      });
++      await scheduled(run, signal)();
++    }
++    expect(names).to.deep.equal(['a', 'a']);
++  });
++
+   it('handles empty visitor', () => {
+     const ast = parse('{ a }', { noLocation: true });
+     expect(() => visit(ast, {})).to.not.throw();
 diff --git a/src/language/lexer.ts b/src/language/lexer.ts
 index 6e33612bc1019dc10757c1d10d24b0511206fd7b..ef4eba2c27311b817eaf42106c41ee94258337b9 100644
 --- a/src/language/lexer.ts
@@ -494,7 +564,7 @@ index 958f9c7773114add14f7f3738db7472d49f077dc..4c3cd9f217dd939ea79d7ff53bb61341
      } while (this.expectOptionalToken(delimiterKind));
      return nodes;
 diff --git a/src/language/visitor.ts b/src/language/visitor.ts
-index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..f8fcd65c8b41d4fb922402cf87d35364ed9fe32f 100644
+index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..090c34268fe8de6eb0f4eedc12bc6e0af3ec07f8 100644
 --- a/src/language/visitor.ts
 +++ b/src/language/visitor.ts
 @@ -273,15 +273,16 @@ export function visit(
@@ -532,7 +602,18 @@ index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..f8fcd65c8b41d4fb922402cf87d35364
              node[editKey] = editValue;
            }
          }
-@@ -439,6 +442,7 @@ export function visitInParallel(
+@@ -332,7 +335,9 @@ export function visit(
+         ? enterLeaveMap.get(node.kind)?.leave
+         : enterLeaveMap.get(node.kind)?.enter;
+ 
+-      result = visitFn?.call(visitor, node, key, parent, path, ancestors);
++      if (visitFn) {
++        result = visitFn.call(visitor, node, key, parent, path, ancestors);
++      }
+ 
+       if (result === BREAK) {
+         break;
+@@ -439,9 +444,11 @@ export function visitInParallel(
      }
  
      const mergedEnterLeave: EnterLeaveVisitor<ASTNode> = {
@@ -540,7 +621,11 @@ index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..f8fcd65c8b41d4fb922402cf87d35364
        enter(...args) {
          const node = args[0];
          for (let i = 0; i < visitors.length; i++) {
-@@ -454,6 +458,7 @@ export function visitInParallel(
++          // @phryneas/schedule may-yield-here
+           if (skipping[i] === null) {
+             const result = enterList[i]?.apply(visitors[i], args);
+             if (result === false) {
+@@ -454,9 +461,11 @@ export function visitInParallel(
            }
          }
        },
@@ -548,8 +633,12 @@ index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..f8fcd65c8b41d4fb922402cf87d35364
        leave(...args) {
          const node = args[0];
          for (let i = 0; i < visitors.length; i++) {
++          // @phryneas/schedule may-yield-here
+           if (skipping[i] === null) {
+             const result = leaveList[i]?.apply(visitors[i], args);
+             if (result === BREAK) {
 diff --git a/src/type/__tests__/validation-test.ts b/src/type/__tests__/validation-test.ts
-index a5bd4012feb652cf96fd63268f0418492e17fb15..37c4b6cd172a6f3c2ef4a2c8dba1342c31b041d9 100644
+index a5bd4012feb652cf96fd63268f0418492e17fb15..d92a8c162f59c4ed53d664b1cc7cef379b88fdb0 100644
 --- a/src/type/__tests__/validation-test.ts
 +++ b/src/type/__tests__/validation-test.ts
 @@ -2661,7 +2661,7 @@ describe('Type System: OneOf Input Object fields must be nullable', () => {
@@ -580,20 +669,17 @@ index a5bd4012feb652cf96fd63268f0418492e17fb15..37c4b6cd172a6f3c2ef4a2c8dba1342c
  
      const schema = new GraphQLSchema({
        query: new GraphQLObjectType({
-@@ -2702,9 +2702,15 @@ describe('Type System: OneOf Input Object fields must be nullable', () => {
+@@ -2702,9 +2702,12 @@ describe('Type System: OneOf Input Object fields must be nullable', () => {
        types,
      });
  
 +    const callsBeforeValidation = getFieldsSpy.callCount;
 +
      expect(validateSchema(schema)).to.have.lengthOf(1);
-+    // Discount field validation; default-value cycle detection calls getFields
-+    // directly, so only the ordinary-function spy counts that pass too.
++    // Discount field validation and default-value cycle detection.
      expect(
 -      getFieldsSpies.reduce((sum, spy) => sum + spy.callCount, 0),
-+      getFieldsSpy.callCount -
-+        callsBeforeValidation -
-+        ('command' in getFields ? 1 : 2) * types.length,
++      getFieldsSpy.callCount - callsBeforeValidation - 2 * types.length,
      ).to.equal(17);
    });
  
@@ -630,7 +716,7 @@ index 2cbc3909ed06b6d7cb5a0288d4b7be1f46e59d02..ed44fd6f197c0dcd5c3f50010dccced3
  
        this._subTypeMap.set(abstractType, set);
 diff --git a/src/type/validate.ts b/src/type/validate.ts
-index e09122869f0aa54c6ebc8031de91c91827e7036c..fcf8f5942c586b9dce3a6dd9cb1ee65256764fdd 100644
+index e09122869f0aa54c6ebc8031de91c91827e7036c..f39b1f51d6a7b740d468b1801a54aac593c45cc2 100644
 --- a/src/type/validate.ts
 +++ b/src/type/validate.ts
 @@ -414,6 +414,7 @@ function validateTypes(context: SchemaValidationContext): void {
@@ -702,6 +788,87 @@ index e09122869f0aa54c6ebc8031de91c91827e7036c..fcf8f5942c586b9dce3a6dd9cb1ee652
        if (dependentState.hasFiniteValue) {
          continue;
        }
+@@ -886,6 +895,7 @@ function detectInputObjectNonFiniteValues(
+     }
+   }
+ 
++  // @phryneas/schedule schedulable
+   function reportCycleRecursive(state: InputObjectFiniteValueState): void {
+     const inputObj = state.inputObj;
+     if (visitedTypes.has(inputObj)) {
+@@ -896,6 +906,7 @@ function detectInputObjectNonFiniteValues(
+     fieldPathIndexByType.set(inputObj, fieldPath.length);
+ 
+     for (const { field, target } of state.targets) {
++      // @phryneas/schedule may-yield-here
+       const targetState = finiteValueStates.get(target);
+       if (targetState?.hasFiniteValue !== false) {
+         continue;
+@@ -960,7 +971,7 @@ function createInputObjectDefaultValueCircularRefsValidator(
+   // This does a straight-forward DFS to find cycles.
+   // It does not terminate when a cycle was found but continues to explore
+   // the graph to find all possible cycles.
+-  return function validateInputObjectDefaultValueCircularRefs(
++  return /* @phryneas/schedule schedulable */ function validateInputObjectDefaultValueCircularRefs(
+     inputObj: GraphQLInputObjectType,
+   ): void {
+     // Start with an empty object as a way to visit every field in this input
+@@ -968,6 +979,7 @@ function createInputObjectDefaultValueCircularRefsValidator(
+     return detectValueDefaultValueCycle(inputObj, Object.create(null));
+   };
+ 
++  // @phryneas/schedule schedulable
+   function detectValueDefaultValueCycle(
+     inputObj: GraphQLInputObjectType,
+     defaultValue: unknown,
+@@ -976,6 +988,7 @@ function createInputObjectDefaultValueCircularRefsValidator(
+     // Otherwise, only object values can contain a cycle.
+     if (isIterableObject(defaultValue)) {
+       for (const itemValue of defaultValue) {
++        // @phryneas/schedule may-yield-here
+         detectValueDefaultValueCycle(inputObj, itemValue);
+       }
+       return;
+@@ -985,6 +998,7 @@ function createInputObjectDefaultValueCircularRefsValidator(
+ 
+     // Check each defined field for a cycle.
+     for (const field of Object.values(inputObj.getFields())) {
++      // @phryneas/schedule may-yield-here
+       const namedFieldType = getNamedType(field.type);
+ 
+       // Only input object type fields can result in a cycle.
+@@ -1007,6 +1021,7 @@ function createInputObjectDefaultValueCircularRefsValidator(
+     }
+   }
+ 
++  // @phryneas/schedule schedulable
+   function detectLiteralDefaultValueCycle(
+     inputObj: GraphQLInputObjectType,
+     defaultValue: ConstValueNode,
+@@ -1015,6 +1030,7 @@ function createInputObjectDefaultValueCircularRefsValidator(
+     // Otherwise, only object values can contain a cycle.
+     if (defaultValue.kind === Kind.LIST) {
+       for (const itemLiteral of defaultValue.values) {
++        // @phryneas/schedule may-yield-here
+         detectLiteralDefaultValueCycle(inputObj, itemLiteral);
+       }
+       return;
+@@ -1025,6 +1041,7 @@ function createInputObjectDefaultValueCircularRefsValidator(
+     // Check each defined field for a cycle.
+     const fieldNodes = keyMap(defaultValue.fields, (field) => field.name.value);
+     for (const field of Object.values(inputObj.getFields())) {
++      // @phryneas/schedule may-yield-here
+       const namedFieldType = getNamedType(field.type);
+ 
+       // Only input object type fields can result in a cycle.
+@@ -1050,6 +1067,7 @@ function createInputObjectDefaultValueCircularRefsValidator(
+     }
+   }
+ 
++  // @phryneas/schedule schedulable
+   function detectFieldDefaultValueCycle(
+     field: GraphQLInputField,
+     fieldType: GraphQLInputObjectType,
 diff --git a/src/utilities/TypeInfo.ts b/src/utilities/TypeInfo.ts
 index 1bbdd9c37be1023be1b3d1649da1346b49a60f2d..623c67c71cf3849cd83772b80369fa12ba056f8d 100644
 --- a/src/utilities/TypeInfo.ts
@@ -967,11 +1134,55 @@ index 21664203eaa3bee325de5c8fdf4f20e8222bf70f..0c5dfd29489caa10431862dcb0ddac2b
        if (possibleInterface.getFields()[fieldName] == null) {
          continue;
        }
+diff --git a/src/validation/rules/NoFragmentCyclesRule.ts b/src/validation/rules/NoFragmentCyclesRule.ts
+index 07552a5aaf038abbbc96066bdd1e734d2ebfc2ba..254f7cb75cad4653d9b5d9b0f42fe4c04de1908a 100644
+--- a/src/validation/rules/NoFragmentCyclesRule.ts
++++ b/src/validation/rules/NoFragmentCyclesRule.ts
+@@ -62,6 +62,7 @@ export function NoFragmentCyclesRule(
+ 
+   return {
+     OperationDefinition: () => false,
++    // @phryneas/schedule schedulable
+     FragmentDefinition(node) {
+       detectCycleRecursive(node);
+       return false;
+@@ -71,6 +72,7 @@ export function NoFragmentCyclesRule(
+   // This does a straight-forward DFS to find cycles.
+   // It does not terminate when a cycle was found but continues to explore
+   // the graph to find all possible cycles.
++  // @phryneas/schedule schedulable
+   function detectCycleRecursive(fragment: FragmentDefinitionNode): void {
+     if (visitedFrags.has(fragment.name.value)) {
+       return;
+@@ -87,6 +89,7 @@ export function NoFragmentCyclesRule(
+     spreadPathIndexByName[fragmentName] = spreadPath.length;
+ 
+     for (const spreadNode of spreadNodes) {
++      // @phryneas/schedule may-yield-here
+       const spreadName = spreadNode.name.value;
+       const cycleIndex = spreadPathIndexByName[spreadName];
+ 
 diff --git a/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts b/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
-index 24f8ab955bab1d55402a577ce6831f8cab93416c..dfab48d8c05feeed11e81d93ce7db9e769939489 100644
+index 24f8ab955bab1d55402a577ce6831f8cab93416c..df35b87389af463cfc6e2246afafa6424f4fd82a 100644
 --- a/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
 +++ b/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
-@@ -288,6 +288,7 @@ function findConflictsWithinSelectionSet(
+@@ -118,6 +118,7 @@ export function OverlappingFieldsCanBeMergedRule(
+ 
+   return {
+     FragmentDefinition: {
++      // @phryneas/schedule schedulable
+       enter(node) {
+         const fragmentName = node.name.value;
+         const fragmentSignature =
+@@ -128,6 +129,7 @@ export function OverlappingFieldsCanBeMergedRule(
+         fragmentVarMap = undefined;
+       },
+     },
++    // @phryneas/schedule schedulable
+     SelectionSet(selectionSet) {
+       const conflicts = findConflictsWithinSelectionSet(
+         validationContext,
+@@ -288,6 +290,7 @@ function findConflictsWithinSelectionSet(
        // This compares each item in the list of fragment spreads to every other
        // item in that same list (except for itself).
        for (let j = i + 1; j < fragmentSpreads.length; j++) {
@@ -979,7 +1190,7 @@ index 24f8ab955bab1d55402a577ce6831f8cab93416c..dfab48d8c05feeed11e81d93ce7db9e7
          collectConflictsBetweenFragments(
            validationContext,
            ruleContext,
-@@ -572,6 +573,7 @@ function findConflictsBetweenSubSelectionSets(
+@@ -572,6 +575,7 @@ function findConflictsBetweenSubSelectionSets(
    // spreads to each item in the second set of spreads.
    for (const fragmentSpread1 of fragmentSpreads1) {
      for (const fragmentSpread2 of fragmentSpreads2) {
@@ -987,7 +1198,7 @@ index 24f8ab955bab1d55402a577ce6831f8cab93416c..dfab48d8c05feeed11e81d93ce7db9e7
        collectConflictsBetweenFragments(
          validationContext,
          ruleContext,
-@@ -598,12 +600,14 @@ function collectConflictsWithin(
+@@ -598,12 +602,14 @@ function collectConflictsWithin(
    // response name. For every response name, if there are multiple fields, they
    // must be compared to find a potential conflict.
    for (const [responseName, fields] of fieldMap.entries()) {
@@ -1002,7 +1213,7 @@ index 24f8ab955bab1d55402a577ce6831f8cab93416c..dfab48d8c05feeed11e81d93ce7db9e7
            const conflict = findConflict(
              validationContext,
              ruleContext,
-@@ -647,10 +651,12 @@ function collectConflictsBetween(
+@@ -647,10 +653,12 @@ function collectConflictsBetween(
    // maps, each field from the first field map must be compared to every field
    // in the second field map to find potential conflicts.
    for (const [responseName, fields1] of fieldMap1.entries()) {
