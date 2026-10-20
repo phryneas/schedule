@@ -2,6 +2,7 @@ import { transformFromAstSync } from "@babel/core";
 import { parse, print, types } from "recast";
 import * as typescriptParser from "recast/parsers/typescript.js";
 import schedulerTransform from "./transform.ts";
+import transformArrayLoops from "./transformArrayLoops.ts";
 import type { SourceAnalysis } from "./analyze.ts";
 
 export { transformProject } from "./project.ts";
@@ -30,7 +31,7 @@ export function transformSource(
     cloneInputAst: false,
     code: false,
     ast: true,
-    plugins: [[schedulerTransform, { ...options, analysis }]],
+    plugins: [transformArrayLoops, [schedulerTransform, { ...options, analysis }]],
   });
   types.visit(ast, {
     visitYieldExpression(path) {

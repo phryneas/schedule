@@ -122,123 +122,65 @@ index 8a1fb1de46d3cdca25674730329547845b75eb82..2d003b3792760c6d494afb0b93fea2ff
        case Kind.FIELD: {
          if (
 diff --git a/src/jsutils/memoize1.ts b/src/jsutils/memoize1.ts
-index c05ad25ed505e174304b731b2e77b9aa4a93eaa8..e09132d1f5b28c98c270b423bd60effb68c3ce7d 100644
+index c05ad25ed505e174304b731b2e77b9aa4a93eaa8..dfe4175f894c2cfeb80af0dcb4b2764f996c96b1 100644
 --- a/src/jsutils/memoize1.ts
 +++ b/src/jsutils/memoize1.ts
-@@ -1,3 +1,9 @@
-+import {
-+  makeSchedulable,
-+  execute,
-+  type SchedulableFunction,
-+} from '@phryneas/schedule';
-+
- /**
-  * Memoizes the provided one-argument function.
+@@ -3,12 +3,10 @@
   *
-@@ -5,18 +11,18 @@
+  * @internal
   */
- export function memoize1<A1 extends object, R>(
-   fn: (a1: A1) => R,
+-export function memoize1<A1 extends object, R>(
+-  fn: (a1: A1) => R,
 -): (a1: A1) => R {
-+): SchedulableFunction<R, [a1: A1]> {
++export function memoize1<A1 extends object, R>(fn: (a1: A1) => R) {
    let cache0: WeakMap<A1, R>;
  
 -  return function memoized(a1) {
-+  return makeSchedulable(function* memoized(a1) {
++  return /* @phryneas/schedule schedulable */ function memoized(a1: A1) {
      cache0 ??= new WeakMap();
  
      let fnResult = cache0.get(a1);
-     if (fnResult === undefined) {
--      fnResult = fn(a1);
-+      fnResult = yield* execute(fn)(a1);
-       cache0.set(a1, fnResult);
-     }
- 
-     return fnResult;
--  };
-+  });
- }
 diff --git a/src/jsutils/memoize2.ts b/src/jsutils/memoize2.ts
-index 785e667f15a25679a11510e8c8be5716f28bee19..0282c9e374ee534423c3aa409951fabd633274ce 100644
+index 785e667f15a25679a11510e8c8be5716f28bee19..8db541e1f380b0e357ef42334691dfed4fa8041c 100644
 --- a/src/jsutils/memoize2.ts
 +++ b/src/jsutils/memoize2.ts
-@@ -1,3 +1,9 @@
-+import {
-+  makeSchedulable,
-+  execute,
-+  type SchedulableFunction,
-+} from '@phryneas/schedule';
-+
- /**
-  * Memoizes the provided two-argument function.
-  *
-@@ -5,10 +11,10 @@
+@@ -5,10 +5,13 @@
   */
  export function memoize2<A1 extends object, A2 extends object, R>(
    fn: (a1: A1, a2: A2) => R,
 -): (a1: A1, a2: A2) => R {
-+): SchedulableFunction<R, [a1: A1, a2: A2], unknown> {
++) {
    let cache0: WeakMap<A1, WeakMap<A2, R>>;
  
 -  return function memoized(a1, a2) {
-+  return makeSchedulable(function* memoized(a1, a2) {
++  return /* @phryneas/schedule schedulable */ function memoized(
++    a1: A1,
++    a2: A2,
++  ) {
      cache0 ??= new WeakMap();
  
      let cache1 = cache0.get(a1);
-@@ -19,10 +25,10 @@ export function memoize2<A1 extends object, A2 extends object, R>(
- 
-     let fnResult = cache1.get(a2);
-     if (fnResult === undefined) {
--      fnResult = fn(a1, a2);
-+      fnResult = yield* execute(fn)(a1, a2);
-       cache1.set(a2, fnResult);
-     }
- 
-     return fnResult;
--  };
-+  });
- }
 diff --git a/src/jsutils/memoize3.ts b/src/jsutils/memoize3.ts
-index 6071116c7693777e3a557b0561a09cd3d1a9c2d5..b2f44cbe079e6ec052225c68cc38abcf6ed9fbdc 100644
+index 6071116c7693777e3a557b0561a09cd3d1a9c2d5..0973dd40ef5bbb6c8e8457ca7a1869d33f17b508 100644
 --- a/src/jsutils/memoize3.ts
 +++ b/src/jsutils/memoize3.ts
-@@ -1,3 +1,9 @@
-+import {
-+  makeSchedulable,
-+  execute,
-+  type SchedulableFunction,
-+} from '@phryneas/schedule';
-+
- /**
-  * Memoizes the provided three-argument function.
-  *
-@@ -8,10 +14,12 @@ export function memoize3<
+@@ -8,10 +8,14 @@ export function memoize3<
    A2 extends object,
    A3 extends object,
    R,
 ->(fn: (a1: A1, a2: A2, a3: A3) => R): (a1: A1, a2: A2, a3: A3) => R {
-+>(
-+  fn: (a1: A1, a2: A2, a3: A3) => R,
-+): SchedulableFunction<R, [a1: A1, a2: A2, a2: A3]> {
++>(fn: (a1: A1, a2: A2, a3: A3) => R) {
    let cache0: WeakMap<A1, WeakMap<A2, WeakMap<A3, R>>>;
  
 -  return function memoized(a1, a2, a3) {
-+  return makeSchedulable(function* memoized(a1, a2, a3) {
++  return /* @phryneas/schedule schedulable */ function memoized(
++    a1: A1,
++    a2: A2,
++    a3: A3,
++  ) {
      cache0 ??= new WeakMap();
  
      let cache1 = cache0.get(a1);
-@@ -28,9 +36,9 @@ export function memoize3<
- 
-     let fnResult = cache2.get(a3);
-     if (fnResult === undefined) {
--      fnResult = fn(a1, a2, a3);
-+      fnResult = yield* execute(fn)(a1, a2, a3);
-       cache2.set(a3, fnResult);
-     }
-     return fnResult;
--  };
-+  });
- }
 diff --git a/src/jsutils/suggestionList.ts b/src/jsutils/suggestionList.ts
 index caae33ae6e671689270c1382309e7717dce14b2c..48e4af01014a2511f4090cdd5720c1b22e88d348 100644
 --- a/src/jsutils/suggestionList.ts
@@ -285,7 +227,7 @@ index 6e33612bc1019dc10757c1d10d24b0511206fd7b..3920c6d7bc118d86a02b5501d7ef39c7
  
  import { Token } from './ast.ts';
 diff --git a/src/language/parser.ts b/src/language/parser.ts
-index 958f9c7773114add14f7f3738db7472d49f077dc..e5d073e7e85c714f2129ed26062fbffd580eb349 100644
+index 958f9c7773114add14f7f3738db7472d49f077dc..dbeb93eb4ae0e0f229bfca877fd19055186379a6 100644
 --- a/src/language/parser.ts
 +++ b/src/language/parser.ts
 @@ -1,5 +1,7 @@
@@ -296,52 +238,51 @@ index 958f9c7773114add14f7f3738db7472d49f077dc..e5d073e7e85c714f2129ed26062fbffd
  import type { Maybe } from '../jsutils/Maybe.ts';
  
  import type { GraphQLError } from '../error/GraphQLError.ts';
-@@ -192,9 +194,26 @@ export function parse(
+@@ -188,6 +190,7 @@ export interface ParseOptions {
+  * lexerDocument.definitions[0].kind; // => 'OperationDefinition'
+  * ```
+  */
++// @phryneas/schedule schedulable
+ export function parse(
    source: string | Source,
    options?: ParseOptions,
- ): DocumentNode {
--  return shouldTrace(parseChannel)
--    ? parseChannel.traceSync(() => parseImpl(source, options), { source })
--    : parseImpl(source, options);
-+  if (shouldTrace(parseChannel)) {
-+    return parseChannel.traceSync(() => parseImpl(source, options), { source });
-+  }
-+
-+  const parser = new Parser(source, options);
-+  const start = parser.expectToken(TokenKind.SOF);
-+  const definitions: Array<DefinitionNode> = [];
-+  do {
-+    // @phryneas/schedule may-yield-here
-+    definitions.push(parser.parseDefinition());
-+  } while (!parser.expectOptionalToken(TokenKind.EOF));
-+  const document = parser.node<DocumentNode>(start, {
-+    kind: Kind.DOCUMENT,
-+    definitions,
-+  });
-+  Object.defineProperty(document, 'tokenCount', {
-+    enumerable: false,
-+    value: parser.tokenCount,
-+  });
-+  return document;
+@@ -197,6 +200,7 @@ export function parse(
+     : parseImpl(source, options);
  }
  
++// @phryneas/schedule schedulable
  function parseImpl(
+   source: string | Source,
+   options: ParseOptions | undefined,
+@@ -386,6 +390,7 @@ export class Parser {
+    *
+    * @internal
+    */
++  // @phryneas/schedule schedulable
+   parseDocument(): DocumentNode {
+     return this.node<DocumentNode>(this._lexer.token, {
+       kind: Kind.DOCUMENT,
+@@ -423,6 +428,7 @@ export class Parser {
+    * @internal
+    */
+   parseDefinition(): DefinitionNode {
++    // @phryneas/schedule may-yield-here
+     if (this.peek(TokenKind.BRACE_L)) {
+       return this.parseOperationDefinition();
+     }
+@@ -1974,6 +1980,7 @@ export class Parser {
+    *
+    * @internal
+    */
++  // @phryneas/schedule schedulable
+   many<T>(
+     openKind: TokenKind,
+     parseFn: () => T,
 diff --git a/src/language/visitor.ts b/src/language/visitor.ts
-index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..c5c023bbe748a00d190554a99b29bb57e150d6b2 100644
+index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..1a9e1167733af743b190661e8ba6d575d5634547 100644
 --- a/src/language/visitor.ts
 +++ b/src/language/visitor.ts
-@@ -273,15 +273,16 @@ export function visit(
-   let inArray = Array.isArray(root);
-   let keys: any = [root];
-   let index = -1;
--  let edits = [];
-+  let edits: Array<any> = [];
-   let node: any = root;
-   let key: any = undefined;
-   let parent: any = undefined;
--  const path: any = [];
-+  const path: Array<string | number> = [];
-   const ancestors = [];
+@@ -282,6 +282,7 @@ export function visit(
    /* eslint-enable no-undef-init */
  
    do {
@@ -365,18 +306,7 @@ index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..c5c023bbe748a00d190554a99b29bb57
              node[editKey] = editValue;
            }
          }
-@@ -332,7 +335,9 @@ export function visit(
-         ? enterLeaveMap.get(node.kind)?.leave
-         : enterLeaveMap.get(node.kind)?.enter;
- 
--      result = visitFn?.call(visitor, node, key, parent, path, ancestors);
-+      if (visitFn) {
-+        result = visitFn.call(visitor, node, key, parent, path, ancestors);
-+      }
- 
-       if (result === BREAK) {
-         break;
-@@ -439,8 +444,10 @@ export function visitInParallel(
+@@ -439,8 +442,10 @@ export function visitInParallel(
      }
  
      const mergedEnterLeave: EnterLeaveVisitor<ASTNode> = {
@@ -387,7 +317,7 @@ index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..c5c023bbe748a00d190554a99b29bb57
          for (let i = 0; i < visitors.length; i++) {
            if (skipping[i] === null) {
              const result = enterList[i]?.apply(visitors[i], args);
-@@ -454,8 +461,10 @@ export function visitInParallel(
+@@ -454,8 +459,10 @@ export function visitInParallel(
            }
          }
        },
@@ -444,38 +374,6 @@ index a5bd4012feb652cf96fd63268f0418492e17fb15..d92a8c162f59c4ed53d664b1cc7cef37
      ).to.equal(17);
    });
  
-diff --git a/src/type/schema.ts b/src/type/schema.ts
-index 2cbc3909ed06b6d7cb5a0288d4b7be1f46e59d02..ed44fd6f197c0dcd5c3f50010dccced38c24209c 100644
---- a/src/type/schema.ts
-+++ b/src/type/schema.ts
-@@ -710,13 +710,22 @@ export class GraphQLSchema {
-     let set = this._subTypeMap.get(abstractType);
-     if (set === undefined) {
-       if (isUnionType(abstractType)) {
--        set = new Set<GraphQLObjectType>(abstractType.getTypes());
-+        set = new Set<GraphQLObjectType>();
-+        for (const type of abstractType.getTypes()) {
-+          // @phryneas/schedule may-yield-here
-+          set.add(type);
-+        }
-       } else {
-         const implementations = this.getImplementations(abstractType);
--        set = new Set<GraphQLObjectType | GraphQLInterfaceType>([
--          ...implementations.objects,
--          ...implementations.interfaces,
--        ]);
-+        set = new Set<GraphQLObjectType | GraphQLInterfaceType>();
-+        for (const type of implementations.objects) {
-+          // @phryneas/schedule may-yield-here
-+          set.add(type);
-+        }
-+        for (const type of implementations.interfaces) {
-+          // @phryneas/schedule may-yield-here
-+          set.add(type);
-+        }
-       }
- 
-       this._subTypeMap.set(abstractType, set);
 diff --git a/src/type/validate.ts b/src/type/validate.ts
 index e09122869f0aa54c6ebc8031de91c91827e7036c..f39b1f51d6a7b740d468b1801a54aac593c45cc2 100644
 --- a/src/type/validate.ts
@@ -703,26 +601,17 @@ index ad90e6574af6e3350435cf7d809bad910ee8b70e..a3674dfbeaacc26811d66f2ab9e782ee
            fieldNode.value.kind === Kind.NULL ||
            coercedValue[fieldName] === null
 diff --git a/src/utilities/typeComparators.ts b/src/utilities/typeComparators.ts
-index 34309a5954818109efaffba46f9a9f95c604a69f..015d50917de2cd9c808dcf65ee9dc47764d7be03 100644
+index 34309a5954818109efaffba46f9a9f95c604a69f..087abe2ac5ef2434c12997d213c45a752603258c 100644
 --- a/src/utilities/typeComparators.ts
 +++ b/src/utilities/typeComparators.ts
-@@ -182,9 +182,13 @@ export function doTypesOverlap(
+@@ -182,6 +182,7 @@ export function doTypesOverlap(
      if (isAbstractType(typeB)) {
        // If both types are abstract, then determine if there is any intersection
        // between possible concrete types of each.
--      return schema
--        .getPossibleTypes(typeA)
--        .some((type) => schema.isSubType(typeB, type));
-+      for (const type of schema.getPossibleTypes(typeA)) {
-+        // @phryneas/schedule may-yield-here
-+        if (schema.isSubType(typeB, type)) {
-+          return true;
-+        }
-+      }
-+      return false;
-     }
-     // Determine if the latter type is a possible concrete type of the former.
-     return schema.isSubType(typeA, typeB);
++      // @phryneas/schedule transform-to-loop
+       return schema
+         .getPossibleTypes(typeA)
+         .some((type) => schema.isSubType(typeB, type));
 diff --git a/src/utilities/validateInputValue.ts b/src/utilities/validateInputValue.ts
 index 322c4666ab25e968a6c8a4eb7d1ec9cb0930cfaa..c061df6b959296398798bbc1fce3ea25eac67b91 100644
 --- a/src/utilities/validateInputValue.ts

@@ -5,6 +5,65 @@ import plugin from "../src/transform.ts";
 import { transformSource } from "../src/index.ts";
 import { async as scheduled } from "../../schedule/src/index.ts";
 
+test("schedulable overrides enclosing explicit scopes, including exported declarations", () => {
+  const output = transformSource(`// @phryneas/schedule explicit
+function child() {
+  // @phryneas/schedule may-yield-here
+  return 1;
+}
+// @phryneas/schedule schedulable
+export function named() {
+  {
+    // @phryneas/schedule explicit
+    child();
+  }
+  return child();
+}
+// @phryneas/schedule schedulable
+export default function defaulted() { return child(); }
+function sibling() { return child(); }
+class Worker {
+  // @phryneas/schedule schedulable
+  run() { return child(); }
+}
+`, "fixture.ts");
+  assert.match(output, /export var named = _makeSchedulable/);
+  assert.match(output, /var defaulted = _makeSchedulable/);
+  assert.match(output, /yield\* _commands.execute\(child\)\(\)/);
+  assert.match(output, /\{\s+child\(\);\s+\}/);
+  assert.match(output, /function sibling\(\) \{ return child\(\); \}/);
+  assert.match(output, /Object.defineProperty\(this.prototype, "run"/);
+  assert.equal((output.match(/yield\* _commands.execute\(child\)\(\)/g) ?? []).length, 3);
+});
+
+test("exported opt-ins propagate an async scheduler through an explicit file", async () => {
+  const output = transformSync(`// @phryneas/schedule explicit
+function child(fn) {
+  // @phryneas/schedule may-yield-here
+  return fn();
+}
+// @phryneas/schedule schedulable
+export function work(fn) { return child(fn); }`, {
+    configFile: false, babelrc: false,
+    plugins: [[plugin, { runtimeModule: new URL("../../schedule/src/index.ts", import.meta.url).href }]],
+  })!.code!;
+  const { work } = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
+  const events: string[] = [];
+  let expired = true;
+  const signal = {
+    aborted: false, throwIfAborted() {},
+    get shouldYield() { return expired; },
+    bump() { expired = false; events.push("yield"); },
+  };
+  assert.equal(await scheduled(work, signal)(() => { events.push("call"); return 42; }), 42);
+  assert.deepEqual(events, ["yield", "call"]);
+});
+
+test("exported opt-ins still reject unsupported functions", () => {
+  assert.throws(() => transformSource(`// @phryneas/schedule schedulable
+export async function work() { return 1; }`, "fixture.ts"), /schedulable cannot opt/);
+});
+
 test("file explicit mode preserves calls and does not wrap functions or methods", () => {
   const source = `// @phryneas/schedule explicit
 export function work(fn) { return fn(helper()); }

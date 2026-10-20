@@ -19,6 +19,22 @@ export default function schedulerPlugin(
   const t = api.types;
   return {
     name: "schedulable-functions",
+    post(file) {
+      const directives = new Set([
+        "@phryneas/schedule schedulable",
+        "@phryneas/schedule explicit",
+        "@phryneas/schedule synchronous",
+        "@phryneas/schedule may-yield-here",
+        "@phryneas/schedule transform-to-loop",
+      ]);
+      t.traverseFast(file.ast, (node: any) => {
+        for (const key of ["comments", "leadingComments", "trailingComments", "innerComments"]) {
+          if (node[key]) {
+            node[key] = node[key].filter((comment: Types.Comment) => !directives.has(comment.value.trim()));
+          }
+        }
+      });
+    },
     visitor: {
       Program(program, state) {
         const make = program.scope.generateUidIdentifier("makeSchedulable");
@@ -38,6 +54,7 @@ export default function schedulerPlugin(
         function isExplicit(path: NodePath): boolean {
           for (let scope: NodePath | null = path; scope; scope = scope.parentPath) {
             if (explicitScopes.has(scope.node)) return true;
+            if (optedIn.has(scope.node)) return false;
           }
           return false;
         }
@@ -112,7 +129,10 @@ export default function schedulerPlugin(
           },
           Function(path) {
             const info = options.analysis?.functions.get(path.node.end!);
-            const marked = path.node.leadingComments?.some(comment => comment.value.trim() === "@phryneas/schedule schedulable");
+            const marked = [
+              ...(path.node.leadingComments ?? []),
+              ...(path.parentPath.isExportDeclaration() ? path.parentPath.node.leadingComments ?? [] : []),
+            ].some(comment => comment.value.trim() === "@phryneas/schedule schedulable");
             if (marked) {
               if (info?.skip || path.node.async || path.node.generator ||
                   t.isTSTypePredicate((path.node.returnType as Types.TSTypeAnnotation)?.typeAnnotation) ||

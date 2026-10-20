@@ -1,7 +1,7 @@
 import { matchesGlob, relative } from "node:path";
 import { NodeBuilderFlags, SignatureKind, SymbolFlags } from "typescript/unstable/sync";
 import type { Project, Signature } from "typescript/unstable/sync";
-import { SyntaxKind, isCallExpression, isCallSignatureDeclaration, isFunctionTypeNode, isFunctionDeclaration, isFunctionExpression, isArrowFunction, isMethodDeclaration, isClassDeclaration, isVariableDeclaration, isPropertyDeclaration, isPropertyAssignment, isPropertyAccessExpression, isNewExpression } from "typescript/unstable/ast";
+import { SyntaxKind, isCallExpression, isCallSignatureDeclaration, isFunctionTypeNode, isFunctionDeclaration, isFunctionExpression, isArrowFunction, isMethodDeclaration, isClassDeclaration, isVariableDeclaration, isPropertyDeclaration, isPropertyAssignment, isPropertyAccessExpression, isNewExpression, isReturnStatement } from "typescript/unstable/ast";
 import type { Node, SourceFile } from "typescript/unstable/ast";
 
 export interface Exclusion {
@@ -34,6 +34,25 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
     const declaration = checker.signatureToSignatureDeclaration(signature, SyntaxKind.FunctionType, node,
       NodeBuilderFlags.NoTruncation | NodeBuilderFlags.UseFullyQualifiedType);
     return declaration ? emitter.printNode(declaration) : undefined;
+  }
+  function factoryResult(call: Node): Node | undefined {
+    if (!isCallExpression(call)) return;
+    const factory = checker.getResolvedSignature(call)?.declaration?.resolve();
+    if (!factory || !(isFunctionDeclaration(factory) || isFunctionExpression(factory) || isArrowFunction(factory) || isMethodDeclaration(factory))
+      || factory.type || !factory.body || factory.asteriskToken
+      || factory.modifiers?.some(modifier => modifier.kind === SyntaxKind.AsyncKeyword)) return;
+    // Only infer a concrete target when the factory returns one function.
+    // Explicit return annotations can hide its generated command property.
+    const returns: (Node | undefined)[] = [];
+    function visitReturns(node: Node): void {
+      if (isFunctionDeclaration(node) || isFunctionExpression(node) || isArrowFunction(node) || isMethodDeclaration(node) || isClassDeclaration(node)) return;
+      if (isReturnStatement(node)) returns.push(node.expression);
+      else node.forEachChild(visitReturns);
+    }
+    if (factory.body.kind === SyntaxKind.Block) visitReturns(factory.body);
+    else returns.push(factory.body);
+    const value = returns.length === 1 ? returns[0] : undefined;
+    return value && (isFunctionExpression(value) || isArrowFunction(value)) ? value : undefined;
   }
   function visit(node: Node): void {
     if (isFunctionDeclaration(node) || isFunctionExpression(node) || isArrowFunction(node) || isMethodDeclaration(node)) {
@@ -75,7 +94,11 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
       // A concrete implementation tells us whether this target is transformed.
       // Function-typed parameters and properties remain dynamic targets.
       const targets = declarations.map(node => {
-        if (node && (isVariableDeclaration(node) || isPropertyDeclaration(node) || isPropertyAssignment(node))) node = node.initializer;
+        if (node && (isVariableDeclaration(node) || isPropertyDeclaration(node) || isPropertyAssignment(node))) {
+          const annotated = "type" in node && !!node.type;
+          node = node.initializer;
+          if (node && !annotated && isCallExpression(node)) node = factoryResult(node);
+        }
         return node && (isFunctionDeclaration(node) || isMethodDeclaration(node) || isFunctionExpression(node) || isArrowFunction(node))
           ? { file: node.getSourceFile().fileName, end: node.end } : undefined;
       });

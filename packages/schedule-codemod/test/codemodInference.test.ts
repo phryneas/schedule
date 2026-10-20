@@ -136,9 +136,25 @@ export class PlainWorker {
 export const arrow = (value: number): number => scheduled(value);
 export function chain(value: number): number { return plain(value); }
 export function chain2(value: number): number { return chain(value); }
+export function factory<T>(fn: (value: T) => T) {
+  return /* @phryneas/schedule schedulable */ function(value: T) { return fn(value); };
+}
+export function annotatedFactory(): (value: number) => number {
+  return /* @phryneas/schedule schedulable */ function(value: number) { return value; };
+}
+export function mixedFactory(flag: boolean) {
+  if (flag) return /* @phryneas/schedule schedulable */ function(value: number) { return value; };
+  return function(value: number) { return value; };
+}
 `);
   await writeFile(join(source, "caller.ts"), `
-import { plain, scheduled as renamed, Worker, OtherWorker, PlainWorker, arrow, chain2 } from './callee.ts';
+import { plain, scheduled as renamed, Worker, OtherWorker, PlainWorker, arrow, chain2, factory, annotatedFactory, mixedFactory } from './callee.ts';
+const produced = factory((value: number) => value + 1);
+const hidden = annotatedFactory();
+const mixed = mixedFactory(true);
+export function runFactory(value: number): number { return produced(value); }
+export function runHidden(value: number): number { return hidden(value); }
+export function runMixed(value: number): number { return mixed(value); }
 export function run(callback: (value: number) => number, worker: Worker): number {
   return renamed(1) + plain(2) + callback(3) + worker.run(4) + arrow(5) + chain2(6) + worker.plain(7);
 }
@@ -155,6 +171,10 @@ export function unionUnknown(worker: Worker | { run(value: number): number }): n
     runtimeModule: join(root, "packages/schedule/src/index.ts") });
   const text = await readFile(join(output, "caller.ts"), "utf8");
   assert.match(text, /yield\* renamed.command\(1\)/);
+  assert.match(text, /yield\* produced.command\(value\)/);
+  assert.doesNotMatch(text, /_commands.execute\(produced\)/);
+  assert.match(text, /_commands.execute\(hidden\)/);
+  assert.match(text, /_commands.execute\(mixed\)/);
   assert.match(text, /plain\(2\)/);
   assert.doesNotMatch(text, /_commands.execute\(plain\)|plain.command/);
   assert.match(text, /_commands.execute\(callback\)\(3\)/);
@@ -175,4 +195,7 @@ export function unionUnknown(worker: Worker | { run(value: number): number }): n
     "--allowImportingTsExtensions", join(output, "caller.ts"),
   ], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stdout + result.stderr);
+  const module = await import(pathToFileURL(join(output, "caller.ts")).href);
+  assert.equal(module.runFactory(3), 4);
+  assert.equal(await scheduled(module.runFactory)(3), 4);
 });
