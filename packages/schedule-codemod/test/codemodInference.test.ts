@@ -38,6 +38,9 @@ export function indirect(value: unknown): boolean { return Boolean.call(undefine
 export function constructors(value: string) {
   return [String(value), Number(value), BigInt(value), Symbol(value), Object(value),
     Array(value), Date(), RegExp(value), Error(value), TypeError(value), Function(value),
+    AggregateError([]), EvalError(value), RangeError(value), ReferenceError(value),
+    SyntaxError(value), URIError(value), SuppressedError(null, null),
+    Intl.Collator(), Intl.DateTimeFormat(), Intl.NumberFormat(),
     globalThis.String(value), String.call(undefined, value), Number.apply(undefined, [value])];
 }
 `);

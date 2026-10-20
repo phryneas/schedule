@@ -4,6 +4,23 @@ import type { Project, Signature } from "typescript/unstable/sync";
 import { SyntaxKind, isCallExpression, isCallSignatureDeclaration, isFunctionTypeNode, isFunctionDeclaration, isFunctionExpression, isArrowFunction, isMethodDeclaration, isClassDeclaration, isVariableDeclaration, isPropertyDeclaration, isPropertyAssignment, isPropertyAccessExpression, isNewExpression, isReturnStatement } from "typescript/unstable/ast";
 import type { Node, SourceFile } from "typescript/unstable/ast";
 
+const nativeConstructors = new Set([
+  "Object", "Function",
+  "Boolean", "Number", "BigInt", "String", "Symbol",
+  "Array", "Date", "RegExp",
+  "Error", "AggregateError", "EvalError", "RangeError", "ReferenceError",
+  "SyntaxError", "TypeError", "URIError", "SuppressedError",
+  "Map", "Set", "WeakMap", "WeakSet", "WeakRef", "FinalizationRegistry",
+  "Promise", "ArrayBuffer", "SharedArrayBuffer", "DataView",
+  "Int8Array", "Uint8Array", "Uint8ClampedArray",
+  "Int16Array", "Uint16Array", "Int32Array", "Uint32Array",
+  "Float16Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
+  "Proxy", "Iterator", "AsyncIterator", "DisposableStack", "AsyncDisposableStack",
+  // Intl constructors (their declarations live inside the Intl namespace).
+  "Collator", "DateTimeFormat", "NumberFormat", "PluralRules", "RelativeTimeFormat",
+  "ListFormat", "Locale", "DisplayNames", "Segmenter", "DurationFormat",
+]);
+
 export interface Exclusion {
   /** Glob relative to the source directory, e.g. language/parser.ts. */
   file: string;
@@ -91,13 +108,11 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
         direct = !!signature && !!checker.getTypePredicateOfSignature(signature);
       }
       const calleeType = checker.getTypeAtLocation(callee);
-      // Native constructors' callable interfaces are not callbacks. BigInt and
-      // Symbol are callable factories without construct signatures.
-      // Locally shadowed values still remain dynamic.
+      // Native constructors are direct calls regardless of how lib.d.ts models
+      // their signatures. Locally shadowed values still remain dynamic.
       direct ||= !!boundDeclaration && isVariableDeclaration(boundDeclaration)
         && project.program.isSourceFileDefaultLibrary(boundDeclaration.getSourceFile())
-        && (!!calleeType && checker.getSignaturesOfType(calleeType, SignatureKind.Construct).length > 0
-          || ["BigInt", "Symbol"].includes(boundDeclaration.name.getText()));
+        && nativeConstructors.has(boundDeclaration.name.getText());
       direct ||= declarations.length > 0 && declarations.every(node => !!node && excluded(node));
       // A concrete implementation tells us whether this target is transformed.
       // Function-typed parameters and properties remain dynamic targets.
