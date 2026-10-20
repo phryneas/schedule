@@ -5,16 +5,17 @@ The scripts also work from other directories when invoked by their full path.
 
 ```sh
 # Clone a supported upstream release, including history needed for replay.
-node graphql-js/clone.mjs v17.0.2
+node packages/graphql-common/clone.mjs v17.0.2
 
 # Replay the 17.x patch lane and configure package files.
-node graphql-js/patch.mjs
-npm ci --prefix graphql-js/patched
+node packages/graphql-common/patch.mjs
+npm ci --prefix packages/graphql-common/patched
 ```
 
 The `17` lane starts at `v17.0.0`; the `16` lane starts at `v16.14.2`.
 Each lane's exact base commit and ordered patch files are recorded in its
-`lane.json`, with independent patches and resolutions using the same scripts.
+`lane.json` in `packages/graphql-16` or `packages/graphql-17`, alongside its
+patches and resolutions. Both use the same shared scripts.
 The script selects the lane from the upstream package's major version and
 rejects unsupported majors before replacing an existing `patched` checkout.
 
@@ -25,13 +26,13 @@ rerere cache. Unknown conflicts stop replay and leave `patched` ready to edit.
 Resolve the listed files, stage those files with `git add`, and run:
 
 ```sh
-node graphql-js/patch.mjs --continue
+node packages/graphql-common/patch.mjs --continue
 ```
 
 After transforming and validating the result, save newly learned resolutions:
 
 ```sh
-node graphql-js/update-patches.mjs --resolutions
+node packages/graphql-common/update-patches.mjs --resolutions
 ```
 
 Commit the exported resolution records with the workflow changes. They contain
@@ -63,7 +64,7 @@ At the lane's base release, edit `patched`, including the memoization adaptation
 `// @phryneas/schedule may-yield-here` comments. Save those changes with:
 
 ```sh
-node graphql-js/update-patches.mjs
+node packages/graphql-common/update-patches.mjs
 ```
 
 This updates the lane's `changes.patch` from its base commit, including added files,
@@ -74,11 +75,11 @@ Make persistent package changes in `patch.mjs`.
 
 ```sh
 # Recreate patched from orig and the saved patch, discarding its current contents.
-node graphql-js/patch.mjs --force
-npm ci --prefix graphql-js/patched
+node packages/graphql-common/patch.mjs --force
+npm ci --prefix packages/graphql-common/patched
 
 # Replace transformed with a copy of patched and codemod its src directory.
-node graphql-js/transform.mjs
+node packages/graphql-common/transform.mjs
 ```
 
 The codemod skips tests and test helpers. Its exclusions are in `codemod.json`.
@@ -93,7 +94,7 @@ building it, including `@phryneas/schedule` as required by its generated imports
 uncommitted edits there are not copied into `patched`. To change upstream versions,
 save your patch, remove `orig`, and clone again with the desired branch or tag.
 
-The entire `graphql-js` directory is outside the published packages.
+The shared `packages/graphql-common` workspace is private and is not published.
 
 `packages/graphql-16` and `packages/graphql-17` are private build workspaces.
 Their `prebuild` scripts prepare the latest stable release in their own ignored
@@ -108,7 +109,7 @@ workspaces. To rebuild just one GraphQL major after building those dependencies:
 npm run build -w @phryneas/scheduled-graphql-16
 ```
 
-The manual scripts still use `graphql-js/orig`, `patched`, and `transformed` by
+The manual scripts still use `packages/graphql-common/orig`, `patched`, and `transformed` by
 default. `GRAPHQL_WORK_DIR` selects another working directory; the workspace
 builds use this to leave manual checkouts untouched.
 

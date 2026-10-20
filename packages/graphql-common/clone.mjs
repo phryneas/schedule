@@ -2,7 +2,7 @@ import { parseArgs } from "node:util";
 import { git, orig } from "./common.mjs";
 
 const { positionals: [ref, ...extra] } = parseArgs({ allowPositionals: true });
-if (extra.length) throw new Error("Usage: node graphql-js/clone.mjs [branch-or-tag]");
+if (extra.length) throw new Error("Usage: node packages/graphql-common/clone.mjs [branch-or-tag]");
 
 git([
   "clone",

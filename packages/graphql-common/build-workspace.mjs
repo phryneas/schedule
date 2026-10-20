@@ -6,10 +6,10 @@ import { parseArgs } from "node:util";
 
 const { positionals: [stage, major, ...extra] } = parseArgs({ allowPositionals: true });
 if (extra.length || !["prepare", "build"].includes(stage) || !["16", "17"].includes(major)) {
-  throw new Error("Usage: node graphql-js/build-workspace.mjs <prepare|build> <16|17>");
+  throw new Error("Usage: node packages/graphql-common/build-workspace.mjs <prepare|build> <16|17>");
 }
 
-const repository = fileURLToPath(new URL("../", import.meta.url));
+const repository = fileURLToPath(new URL("../../", import.meta.url));
 const workspace = join(repository, "packages", `graphql-${major}`);
 const workDirectory = join(workspace, ".tmp");
 const patched = join(workDirectory, "patched");
@@ -24,7 +24,7 @@ const npm = (args, cwd) => execFileSync("npm", ["--prefix", cwd, ...args], {
   cwd, env, stdio: "inherit",
 });
 const run = (script, ...args) => execFileSync(process.execPath, [
-  join(repository, "graphql-js", script), ...args,
+  fileURLToPath(new URL(script, import.meta.url)), ...args,
 ], { cwd: repository, env, stdio: "inherit" });
 
 if (stage === "prepare") {

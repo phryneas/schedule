@@ -3,7 +3,7 @@ import { cp, readFile, rm } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { transformProject } from "../packages/schedule-codemod/src/project.ts";
+import { transformProject } from "../schedule-codemod/src/project.ts";
 import { patched, transformed } from "./common.mjs";
 
 parseArgs();

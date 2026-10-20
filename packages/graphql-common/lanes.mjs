@@ -21,7 +21,7 @@ function git(directory, args) {
 
 export function laneDirectory(root, lane) {
   if (!/^\d+$/.test(lane)) throw new Error("A lane must be a major version, such as 17.");
-  return join(root, "lanes", lane);
+  return resolve(root, "..", `graphql-${lane}`);
 }
 
 async function copyResolutions(source, destination) {

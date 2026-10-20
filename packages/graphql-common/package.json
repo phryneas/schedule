@@ -1,0 +1,6 @@
+{
+  "name": "@phryneas/scheduled-graphql-common",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module"
+}

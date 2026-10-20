@@ -4,7 +4,7 @@
   "private": true,
   "files": ["dist"],
   "scripts": {
-    "prebuild": "node ../../graphql-js/build-workspace.mjs prepare 16",
-    "build": "node ../../graphql-js/build-workspace.mjs build 16"
+    "prebuild": "node ../graphql-common/build-workspace.mjs prepare 16",
+    "build": "node ../graphql-common/build-workspace.mjs build 16"
   }
 }

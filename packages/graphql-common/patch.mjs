@@ -23,7 +23,7 @@ if (args.continue) {
   const major = upstream.version.split(".")[0];
   const lane = laneDirectory(root, major);
   if (!existsSync(join(lane, "lane.json"))) {
-    throw new Error(`No patch lane for GraphQL ${upstream.version}. Add lanes/${major}/lane.json before patching this major version.`);
+    throw new Error(`No patch lane for GraphQL ${upstream.version}. Add packages/graphql-${major}/lane.json before patching this major version.`);
   }
   if (existsSync(patched)) {
     if (!args.force) {

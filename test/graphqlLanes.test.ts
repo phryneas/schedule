@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { continueLane, prepareLane, saveResolutions } from "../graphql-js/lanes.mjs";
+import { continueLane, prepareLane, saveResolutions } from "../packages/graphql-common/lanes.mjs";
 
 test("patch lanes replay committed resolutions in fresh checkouts and stop on new conflicts", async t => {
   const root = await mkdtemp(join(tmpdir(), "schedule-lanes-"));

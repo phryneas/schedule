@@ -9,12 +9,12 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   await mkdir(join(repository, ".tmp"), { recursive: true });
   const directory = await mkdtemp(join(repository, ".tmp/graphql-workflow-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  const workflow = join(directory, "graphql-js");
-  await cp(join(repository, "graphql-js"), workflow, {
+  const workflow = join(directory, "packages/graphql-common");
+  await cp(join(repository, "packages/graphql-common"), workflow, {
     recursive: true,
-    filter: path => !["orig", "patched", "transformed"].some(name => path === join(repository, "graphql-js", name)),
+    filter: path => !["orig", "patched", "transformed"].some(name => path === join(repository, "packages/graphql-common", name)),
   });
-  await symlink(join(repository, "packages"), join(directory, "packages"), "dir");
+  await symlink(join(repository, "packages/schedule-codemod"), join(directory, "packages/schedule-codemod"), "dir");
   const orig = join(workflow, "orig");
   await mkdir(join(orig, "src/__tests__"), { recursive: true });
   await writeFile(join(orig, ".gitignore"), "node_modules\n");
@@ -55,8 +55,8 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   git(["init"]);
   git(["add", "."]);
   git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "Baseline"]);
-  const lane = join(workflow, "lanes/17");
-  await rm(join(lane, "resolutions"), { recursive: true, force: true });
+  const lane = join(directory, "packages/graphql-17");
+  await mkdir(lane, { recursive: true });
   await writeFile(join(lane, "lane.json"), JSON.stringify({
     major: 17, base: git(["rev-parse", "HEAD"]).trim(), patches: ["changes.patch"],
   }));
