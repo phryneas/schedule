@@ -4,34 +4,68 @@ Run these commands from the scheduling repository root using Node.js 24.
 The scripts also work from other directories when invoked by their full path.
 
 ```sh
-# Clone upstream's default branch, or supply a branch/tag such as v16.14.2.
-node graphql-js/clone.mjs
+# Clone a supported upstream release, including history needed for replay.
+node graphql-js/clone.mjs v17.0.2
 
-# Copy the clean checkout, apply changes.patch, and configure package files.
+# Replay the 17.x patch lane and configure package files.
 node graphql-js/patch.mjs
 npm ci --prefix graphql-js/patched
 ```
 
-Use `node graphql-js/patch.mjs --with-additional-tests` to also apply `tests.patch`,
-which adds scheduler regression tests for parsing and visiting. Adaptations to
-existing upstream tests and integration setup remain in `changes.patch`.
+The `17` lane starts at `v17.0.0`. Its exact base commit and ordered patch files
+are recorded in `lanes/17/lane.json`. A future `16` lane can have its own base,
+patches, and resolutions, using the same scripts.
+The script selects the lane from the upstream package's major version and
+rejects unsupported majors before replacing an existing `patched` checkout.
+
+Lane replay creates patch commits on the recorded base and rebases them onto
+the release checked out in `orig`. Known conflict resolutions are copied from
+the lane's tracked `resolutions` directory into the disposable checkout's Git
+rerere cache. Unknown conflicts stop replay and leave `patched` ready to edit.
+Resolve the listed files, stage those files with `git add`, and run:
+
+```sh
+node graphql-js/patch.mjs --continue
+```
+
+After transforming and validating the result, save newly learned resolutions:
+
+```sh
+node graphql-js/update-patches.mjs --resolutions
+```
+
+Commit the exported resolution records with the workflow changes. They contain
+conflicted and resolved source files, including any numbered variants Git needs.
+Temporary and unresolved cache entries are not exported. Normal replay never
+updates the tracked records. Use a consistent Git version in automation; replay
+is tested with Git 2.54.0. A reused resolution still needs build/test validation.
+
+To edit a lane's starting patch, prepare its base release, edit `patched`, and run
+`update-patches.mjs`. On later releases, that command only permits exporting
+resolutions with `--resolutions`, to avoid replacing the base patch with a
+release-specific diff. The optional additional tests are retained in `tests.patch`
+for reference but are not currently applied by the workflow.
+
+Existing shallow `orig` checkouts need the base's history fetched before lane
+replay. New `clone.mjs` checkouts include it. Replay itself makes no network calls.
+
+Adaptations to existing upstream tests and integration setup remain in the
+lane's starting patch.
 Package manifests are configured with `npm pkg set`, and npm updates the root
 lockfile without installing dependencies. Set `SCHEDULE_PACKAGE` to override
 the schedule dependency (for example, an absolute `file:` path for local work).
 
-Edit `patched`, including the memoization adaptations and
+At the lane's base release, edit `patched`, including the memoization adaptations and
 `// @phryneas/schedule may-yield-here` comments. Save those changes with:
 
 ```sh
 node graphql-js/update-patches.mjs
 ```
 
-This updates `changes.patch` from the original commit, including added files,
-deletions, and binary changes. For a checkout prepared with `--with-additional-tests`, it
-saves the parser/visitor test changes separately in `tests.patch`. Otherwise,
-the saved test patch is left unchanged. It stages changes in the
+This updates the lane's `changes.patch` from its base commit, including added files,
+deletions, and binary changes. It stages changes in the
 `patched` checkout. Commits made there are included too. Ignored files are omitted.
-`package.json` and `package-lock.json` files are excluded from both patches.
+`package.json` and `package-lock.json` files are excluded from the patch.
 Make persistent package changes in `patch.mjs`.
 
 ```sh
@@ -42,8 +76,6 @@ npm ci --prefix graphql-js/patched
 # Replace transformed with a copy of patched and codemod its src directory.
 node graphql-js/transform.mjs
 ```
-
-Add `--with-additional-tests` when recreating `patched` to include the optional tests again.
 
 The codemod skips tests and test helpers. Its exclusions are in `codemod.json`.
 After transformation, the script formats `transformed/src` using the workspace's

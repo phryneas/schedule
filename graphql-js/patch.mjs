@@ -3,30 +3,35 @@ import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { git, orig, patched, patchFile, testPatchFile } from "./common.mjs";
+import { git, root, orig, patched } from "./common.mjs";
+import { continueLane, laneDirectory, prepareLane, rebaseInProgress } from "./lanes.mjs";
 
 const { values: args } = parseArgs({
   options: {
     force: { type: "boolean" },
-    "with-additional-tests": { type: "boolean" },
+    continue: { type: "boolean" },
   },
 });
-const base = git(["rev-parse", "HEAD"], orig).trim();
-if (existsSync(patched)) {
-  if (!args.force) {
-    throw new Error("patched already exists. Save edits with update-patches.mjs, then use --force to recreate it.");
-  }
-  await rm(patched, { recursive: true, force: true });
+if (args.continue && args.force) {
+  throw new Error("--continue cannot be combined with other options.");
 }
-git(["clone", "--local", "--no-hardlinks", "--", orig, patched]);
-git(["config", "schedule.base", base], patched);
-const withTests = args["with-additional-tests"] ?? false;
-git(["config", "schedule.tests", String(withTests)], patched);
-for (const file of withTests ? [patchFile, testPatchFile] : [patchFile]) {
-  if ((await readFile(file, "utf8")).trim()) {
-    git(["apply", "--check", file], patched);
-    git(["apply", file], patched);
+if (args.continue) {
+  if (!rebaseInProgress(patched)) throw new Error("No lane rebase is in progress.");
+  continueLane(patched);
+} else {
+  const upstream = JSON.parse(git(["show", "HEAD:package.json"], orig));
+  const major = upstream.version.split(".")[0];
+  const lane = laneDirectory(root, major);
+  if (!existsSync(join(lane, "lane.json"))) {
+    throw new Error(`No patch lane for GraphQL ${upstream.version}. Add lanes/${major}/lane.json before patching this major version.`);
   }
+  if (existsSync(patched)) {
+    if (!args.force) {
+      throw new Error("patched already exists. Save edits with update-patches.mjs, then use --force to recreate it.");
+    }
+    await rm(patched, { recursive: true, force: true });
+  }
+  await prepareLane({ source: orig, destination: patched, lane });
 }
 const npm = (args, cwd = patched) => execFileSync("npm", args, {
   cwd, stdio: "inherit",

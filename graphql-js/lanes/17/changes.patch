@@ -59,10 +59,10 @@ index 33dd6ec67606ade911e8a9ddd8775c854917b057..bf9235fcb6b020cfd91e452296ca5038
  
  // eslint-disable-next-line no-restricted-exports, import/no-default-export
 diff --git a/resources/integration-test.ts b/resources/integration-test.ts
-index 4afd27627fc553b3ba26e6ad2bc2f9d558ee2a8f..ca53aeca0f1fe49abefb6ed53cc04d57452771ec 100644
+index fd4ce1e3b1e91b8692cce9aa6854b5f5e35e3e34..30b33f945a6a8300f24620539d747721e686acf0 100644
 --- a/resources/integration-test.ts
 +++ b/resources/integration-test.ts
-@@ -51,7 +51,7 @@ describe('Integration Tests', () => {
+@@ -57,7 +57,7 @@ describe('Integration Tests', () => {
  
    // Tracing channel tests
    testOnNodeProject('diagnostics-bun');
@@ -71,7 +71,7 @@ index 4afd27627fc553b3ba26e6ad2bc2f9d558ee2a8f..ca53aeca0f1fe49abefb6ed53cc04d57
    testOnNodeProject('diagnostics-deno-with-node-build');
  
    // Conditional export tests
-@@ -60,7 +60,7 @@ describe('Integration Tests', () => {
+@@ -66,7 +66,7 @@ describe('Integration Tests', () => {
    // Development mode tests
    testOnNodeProject('dev-explicit');
    testOnNodeProject('dev-node');
@@ -80,7 +80,7 @@ index 4afd27627fc553b3ba26e6ad2bc2f9d558ee2a8f..ca53aeca0f1fe49abefb6ed53cc04d57
    testOnNodeProject('dev-deno-with-node-build');
    testOnNodeProject('dev-bun');
    testOnNodeProject('dev-webpack');
-@@ -73,7 +73,7 @@ describe('Integration Tests', () => {
+@@ -79,7 +79,7 @@ describe('Integration Tests', () => {
  
    // Production mode tests
    testOnNodeProject('prod-node');
@@ -90,10 +90,10 @@ index 4afd27627fc553b3ba26e6ad2bc2f9d558ee2a8f..ca53aeca0f1fe49abefb6ed53cc04d57
    testOnNodeProject('prod-bun');
    testOnNodeProject('prod-webpack');
 diff --git a/src/execution/__tests__/diagnostics-subscribe-test.ts b/src/execution/__tests__/diagnostics-subscribe-test.ts
-index 48b7cdbd0d3eea7e9ca348edf1b11baec24a094a..e6a911c53bf848c48e8cfc1c40735d9e98acf2ae 100644
+index 018da50bf5387bd1073834c7821821ab10d8787b..4699c364ddb5d8eb5f9aee5231283c0da40da48c 100644
 --- a/src/execution/__tests__/diagnostics-subscribe-test.ts
 +++ b/src/execution/__tests__/diagnostics-subscribe-test.ts
-@@ -270,6 +270,7 @@ describe('subscribe diagnostics channel', () => {
+@@ -269,6 +269,7 @@ describe('subscribe diagnostics channel', () => {
          const sourceEventStream = await createSourceEventStream(validatedArgs);
          assert(isAsyncIterable(sourceEventStream));
  
@@ -102,10 +102,10 @@ index 48b7cdbd0d3eea7e9ca348edf1b11baec24a094a..e6a911c53bf848c48e8cfc1c40735d9e
            executeSubscriptionEvent(args);
  
 diff --git a/src/execution/collectFields.ts b/src/execution/collectFields.ts
-index 8a1fb1de46d3cdca25674730329547845b75eb82..2d003b3792760c6d494afb0b93fea2ff46446932 100644
+index 98546f032ec397ad1838c2bc5ef4e0124a3f8a75..2bc3762e71b3024860e5bed913bebbaa49651ac3 100644
 --- a/src/execution/collectFields.ts
 +++ b/src/execution/collectFields.ts
-@@ -159,6 +159,7 @@ export function collectSubfields(
+@@ -160,6 +160,7 @@ export function collectSubfields(
    const newDeferUsages: Array<DeferUsage> = [];
  
    for (const fieldDetail of fieldDetailsList) {
@@ -113,7 +113,7 @@ index 8a1fb1de46d3cdca25674730329547845b75eb82..2d003b3792760c6d494afb0b93fea2ff
      const selectionSet = fieldDetail.node.selectionSet;
      if (selectionSet) {
        const { deferUsage, fragmentVariableValues } = fieldDetail;
-@@ -199,6 +200,7 @@ function collectFieldsImpl(
+@@ -200,6 +201,7 @@ function collectFieldsImpl(
    } = context;
  
    for (const selection of selectionSet.selections) {
@@ -227,7 +227,7 @@ index 6e33612bc1019dc10757c1d10d24b0511206fd7b..3920c6d7bc118d86a02b5501d7ef39c7
  
  import { Token } from './ast.ts';
 diff --git a/src/language/parser.ts b/src/language/parser.ts
-index 958f9c7773114add14f7f3738db7472d49f077dc..dbeb93eb4ae0e0f229bfca877fd19055186379a6 100644
+index 0902448ff5db93c00527e7f794a469680e743f68..faf3da14131a84f4a92b6c44fed7c509cdf845b6 100644
 --- a/src/language/parser.ts
 +++ b/src/language/parser.ts
 @@ -1,5 +1,7 @@
@@ -238,7 +238,7 @@ index 958f9c7773114add14f7f3738db7472d49f077dc..dbeb93eb4ae0e0f229bfca877fd19055
  import type { Maybe } from '../jsutils/Maybe.ts';
  
  import type { GraphQLError } from '../error/GraphQLError.ts';
-@@ -188,6 +190,7 @@ export interface ParseOptions {
+@@ -172,6 +174,7 @@ export interface ParseOptions {
   * lexerDocument.definitions[0].kind; // => 'OperationDefinition'
   * ```
   */
@@ -246,7 +246,7 @@ index 958f9c7773114add14f7f3738db7472d49f077dc..dbeb93eb4ae0e0f229bfca877fd19055
  export function parse(
    source: string | Source,
    options?: ParseOptions,
-@@ -197,6 +200,7 @@ export function parse(
+@@ -181,6 +184,7 @@ export function parse(
      : parseImpl(source, options);
  }
  
@@ -254,7 +254,7 @@ index 958f9c7773114add14f7f3738db7472d49f077dc..dbeb93eb4ae0e0f229bfca877fd19055
  function parseImpl(
    source: string | Source,
    options: ParseOptions | undefined,
-@@ -386,6 +390,7 @@ export class Parser {
+@@ -370,6 +374,7 @@ export class Parser {
     *
     * @internal
     */
@@ -262,7 +262,7 @@ index 958f9c7773114add14f7f3738db7472d49f077dc..dbeb93eb4ae0e0f229bfca877fd19055
    parseDocument(): DocumentNode {
      return this.node<DocumentNode>(this._lexer.token, {
        kind: Kind.DOCUMENT,
-@@ -423,6 +428,7 @@ export class Parser {
+@@ -407,6 +412,7 @@ export class Parser {
     * @internal
     */
    parseDefinition(): DefinitionNode {
@@ -270,7 +270,7 @@ index 958f9c7773114add14f7f3738db7472d49f077dc..dbeb93eb4ae0e0f229bfca877fd19055
      if (this.peek(TokenKind.BRACE_L)) {
        return this.parseOperationDefinition();
      }
-@@ -1974,6 +1980,7 @@ export class Parser {
+@@ -1950,6 +1956,7 @@ export class Parser {
     *
     * @internal
     */
@@ -329,7 +329,7 @@ index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..1a9e1167733af743b190661e8ba6d575
            if (skipping[i] === null) {
              const result = leaveList[i]?.apply(visitors[i], args);
 diff --git a/src/type/__tests__/validation-test.ts b/src/type/__tests__/validation-test.ts
-index a5bd4012feb652cf96fd63268f0418492e17fb15..d92a8c162f59c4ed53d664b1cc7cef379b88fdb0 100644
+index f8c31d3184191566822c65d7fa131cc8972d1727..f84eaa98ec5678b6d4d7ee50062b647875ed5518 100644
 --- a/src/type/__tests__/validation-test.ts
 +++ b/src/type/__tests__/validation-test.ts
 @@ -2661,7 +2661,7 @@ describe('Type System: OneOf Input Object fields must be nullable', () => {
@@ -529,7 +529,7 @@ index e09122869f0aa54c6ebc8031de91c91827e7036c..f39b1f51d6a7b740d468b1801a54aac5
      field: GraphQLInputField,
      fieldType: GraphQLInputObjectType,
 diff --git a/src/utilities/TypeInfo.ts b/src/utilities/TypeInfo.ts
-index 1bbdd9c37be1023be1b3d1649da1346b49a60f2d..623c67c71cf3849cd83772b80369fa12ba056f8d 100644
+index 914b0ffde5c0fe0400c961bb080666a1ad39baea..013cf85f3c85136d1c7aa42f3d644ce1b8c48391 100644
 --- a/src/utilities/TypeInfo.ts
 +++ b/src/utilities/TypeInfo.ts
 @@ -937,6 +937,7 @@ export function visitWithTypeInfo(
@@ -549,7 +549,7 @@ index 1bbdd9c37be1023be1b3d1649da1346b49a60f2d..623c67c71cf3849cd83772b80369fa12
        const node = args[0];
        const fn = getEnterLeaveForKind(visitor, node.kind).leave;
 diff --git a/src/utilities/coerceInputValue.ts b/src/utilities/coerceInputValue.ts
-index ad90e6574af6e3350435cf7d809bad910ee8b70e..a3674dfbeaacc26811d66f2ab9e782ee5d9a102d 100644
+index 2d6c23f4a795c63e721798c655b60cad86ec145d..c900610befc77ae59ee59fa3a9ca067f17d60263 100644
 --- a/src/utilities/coerceInputValue.ts
 +++ b/src/utilities/coerceInputValue.ts
 @@ -86,6 +86,7 @@ export function coerceInputValue(
@@ -721,7 +721,7 @@ index 2490433dc97a658d4d63ffecc6d9cc216403eb54..4b2dc2cc6ce194cfc4d80573f028419e
          // Like JSON, undefined fields are not included in the literal result.
          if (fieldValue !== undefined) {
 diff --git a/src/validation/ValidationContext.ts b/src/validation/ValidationContext.ts
-index 8828feb09f71bdf1d4d4cd327dfc5c840e89c9a2..4785449782e41909e3edadf7f87ff7568ed36d0a 100644
+index 1047b91fc7d4f1c3e169203e3fc6b795736ab3c5..8b2e4664ff637270135ee2054e4734570963fc38 100644
 --- a/src/validation/ValidationContext.ts
 +++ b/src/validation/ValidationContext.ts
 @@ -85,6 +85,7 @@ export class ASTValidationContext {
@@ -748,7 +748,7 @@ index 8828feb09f71bdf1d4d4cd327dfc5c840e89c9a2..4785449782e41909e3edadf7f87ff756
            const fragName = spread.name.value;
            if (!collectedNames.has(fragName)) {
              collectedNames.add(fragName);
-@@ -481,6 +484,7 @@ export class ValidationContext extends ASTValidationContext {
+@@ -413,6 +416,7 @@ export class ValidationContext extends ASTValidationContext {
      if (!usages) {
        usages = this.getVariableUsages(operation);
        for (const frag of this.getRecursivelyReferencedFragments(operation)) {
@@ -813,42 +813,34 @@ index 07552a5aaf038abbbc96066bdd1e734d2ebfc2ba..254f7cb75cad4653d9b5d9b0f42fe4c0
        const cycleIndex = spreadPathIndexByName[spreadName];
  
 diff --git a/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts b/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
-index 24f8ab955bab1d55402a577ce6831f8cab93416c..df35b87389af463cfc6e2246afafa6424f4fd82a 100644
+index 908d82d946eeed3dff1cbbe93d04e4d45234458f..cba4ccf90f6f111e052b42da72e8f39f0261a956 100644
 --- a/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
 +++ b/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
 @@ -118,6 +118,7 @@ export function OverlappingFieldsCanBeMergedRule(
+   const cachedFieldsAndFragmentSpreads = new Map();
  
    return {
-     FragmentDefinition: {
-+      // @phryneas/schedule schedulable
-       enter(node) {
-         const fragmentName = node.name.value;
-         const fragmentSignature =
-@@ -128,6 +129,7 @@ export function OverlappingFieldsCanBeMergedRule(
-         fragmentVarMap = undefined;
-       },
-     },
 +    // @phryneas/schedule schedulable
      SelectionSet(selectionSet) {
        const conflicts = findConflictsWithinSelectionSet(
-         validationContext,
-@@ -288,6 +290,7 @@ function findConflictsWithinSelectionSet(
+         context,
+@@ -274,6 +275,7 @@ function findConflictsWithinSelectionSet(
        // This compares each item in the list of fragment spreads to every other
        // item in that same list (except for itself).
        for (let j = i + 1; j < fragmentSpreads.length; j++) {
 +        // @phryneas/schedule may-yield-here
          collectConflictsBetweenFragments(
-           validationContext,
-           ruleContext,
-@@ -572,6 +575,7 @@ function findConflictsBetweenSubSelectionSets(
+           context,
+           conflicts,
+@@ -578,6 +580,7 @@ function findConflictsBetweenSubSelectionSets(
    // spreads to each item in the second set of spreads.
    for (const fragmentSpread1 of fragmentSpreads1) {
      for (const fragmentSpread2 of fragmentSpreads2) {
 +      // @phryneas/schedule may-yield-here
        collectConflictsBetweenFragments(
-         validationContext,
-         ruleContext,
-@@ -598,12 +602,14 @@ function collectConflictsWithin(
+         context,
+         conflicts,
+@@ -610,12 +613,14 @@ function collectConflictsWithin(
    // response name. For every response name, if there are multiple fields, they
    // must be compared to find a potential conflict.
    for (const [responseName, fields] of fieldMap.entries()) {
@@ -861,9 +853,9 @@ index 24f8ab955bab1d55402a577ce6831f8cab93416c..df35b87389af463cfc6e2246afafa642
          for (let j = i + 1; j < fields.length; j++) {
 +          // @phryneas/schedule may-yield-here
            const conflict = findConflict(
-             validationContext,
-             ruleContext,
-@@ -647,10 +653,12 @@ function collectConflictsBetween(
+             context,
+             cachedFieldsAndFragmentSpreads,
+@@ -663,10 +668,12 @@ function collectConflictsBetween(
    // maps, each field from the first field map must be compared to every field
    // in the second field map to find potential conflicts.
    for (const [responseName, fields1] of fieldMap1.entries()) {
@@ -874,8 +866,8 @@ index 24f8ab955bab1d55402a577ce6831f8cab93416c..df35b87389af463cfc6e2246afafa642
          for (const field2 of fields2) {
 +          // @phryneas/schedule may-yield-here
            const conflict = findConflict(
-             validationContext,
-             ruleContext,
+             context,
+             cachedFieldsAndFragmentSpreads,
 diff --git a/src/validation/rules/PossibleFragmentSpreadsRule.ts b/src/validation/rules/PossibleFragmentSpreadsRule.ts
 index 38ce9aa50af115088eff1358bc0cbd573b27833d..0a4a66913cf4a14adefcdd85cb4b76fe83531b66 100644
 --- a/src/validation/rules/PossibleFragmentSpreadsRule.ts

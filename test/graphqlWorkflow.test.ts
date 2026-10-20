@@ -14,8 +14,6 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
     recursive: true,
     filter: path => !["orig", "patched", "transformed"].some(name => path === join(repository, "graphql-js", name)),
   });
-  await writeFile(join(workflow, "changes.patch"), "");
-  await writeFile(join(workflow, "tests.patch"), "");
   await symlink(join(repository, "packages"), join(directory, "packages"), "dir");
   const orig = join(workflow, "orig");
   await mkdir(join(orig, "src/__tests__"), { recursive: true });
@@ -25,7 +23,7 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
     include: ["src/**/*.ts"],
   }));
   await writeFile(join(orig, "package.json"), JSON.stringify({
-    name: "fixture", version: "1.2.3", type: "module",
+    name: "fixture", version: "17.0.0", type: "module",
     engines: { node: "^22.0.0 || ^24.0.0 || >=26.0.0" },
     scripts: {
       check: "npm run check:ts && npm run check:deno && npm run extra",
@@ -57,6 +55,12 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   git(["init"]);
   git(["add", "."]);
   git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "Baseline"]);
+  const lane = join(workflow, "lanes/17");
+  await rm(join(lane, "resolutions"), { recursive: true, force: true });
+  await writeFile(join(lane, "lane.json"), JSON.stringify({
+    major: 17, base: git(["rev-parse", "HEAD"]).trim(), patches: ["changes.patch"],
+  }));
+  await writeFile(join(lane, "changes.patch"), "");
   function run(name: string, ...args: string[]) {
     return spawnSync(process.execPath, [join(workflow, name + ".mjs"), ...args], {
       cwd: directory, encoding: "utf8",
@@ -77,11 +81,13 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
     assert.notEqual(invalid.status, 0);
     assert.match(invalid.stderr, /ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL/);
   }
-  succeeds("patch", "--with-additional-tests");
+  succeeds("patch");
   const patched = join(workflow, "patched");
+  assert.equal(git(["config", "--get", "schedule.lane"], patched).trim(), "17");
+  await assert.rejects(readFile(join(workflow, "changes.patch")), { code: "ENOENT" });
   const configured = JSON.parse(await readFile(join(patched, "package.json"), "utf8"));
   assert.equal(configured.name, "@phryneas/scheduled-graphql");
-  assert.equal(configured.version, "1.2.3");
+  assert.equal(configured.version, "17.0.0");
   assert.equal(configured.engines.node, "^24.0.0 || >=26.0.0");
   assert.equal(configured.scripts.check, "npm run check:ts && npm run extra");
   assert.match(configured.scripts["testonly:cover"], /--test-coverage-lines=97 --test-coverage-branches=97 --test-coverage-functions=100/);
@@ -97,8 +103,6 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   assert.equal(jestDependencies["@babel/plugin-transform-modules-commonjs"], "^7.27.1");
   const edited = original.replace("return 1", "return 2");
   await writeFile(join(patched, "src/index.ts"), edited);
-  const editedTest = testSource.replace("return 1", "return 3");
-  await writeFile(join(patched, optionalTest), editedTest);
   await writeFile(join(patched, "src/added.ts"), "export const added = true;\n");
   const binary = Buffer.from([0, 1, 2, 255]);
   await writeFile(join(patched, "fixture.bin"), binary);
@@ -108,29 +112,23 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   assert.notEqual(run("patch").status, 0);
   assert.equal(await readFile(join(patched, "src/index.ts"), "utf8"), edited);
   succeeds("update-patches");
-  const patch = await readFile(join(workflow, "changes.patch"), "utf8");
+  const patch = await readFile(join(lane, "changes.patch"), "utf8");
   assert.match(patch, /GIT binary patch/);
   assert.doesNotMatch(patch, /node_modules/);
   assert.doesNotMatch(patch, /parser-test/);
   assert.doesNotMatch(patch, /package(?:-lock)?\.json/);
-  const testPatch = await readFile(join(workflow, "tests.patch"), "utf8");
-  assert.match(testPatch, /parser-test/);
-  assert.doesNotMatch(testPatch, /src\/index.ts/);
   succeeds("update-patches");
-  assert.equal(await readFile(join(workflow, "changes.patch"), "utf8"), patch);
+  assert.equal(await readFile(join(lane, "changes.patch"), "utf8"), patch);
   succeeds("patch", "--force");
   assert.equal(await readFile(join(patched, optionalTest), "utf8"), testSource);
   succeeds("update-patches");
-  assert.equal(await readFile(join(workflow, "tests.patch"), "utf8"), testPatch);
-  assert.equal(await readFile(join(workflow, "changes.patch"), "utf8"), patch);
-  await writeFile(join(patched, optionalTest), editedTest);
+  assert.equal(await readFile(join(lane, "changes.patch"), "utf8"), patch);
+  await writeFile(join(patched, optionalTest), testSource.replace("return 1", "return 3"));
   assert.notEqual(run("update-patches").status, 0);
-  assert.equal(await readFile(join(workflow, "tests.patch"), "utf8"), testPatch);
-  succeeds("patch", "--force", "--with-additional-tests");
-  assert.equal(await readFile(join(patched, optionalTest), "utf8"), editedTest);
+  assert.equal(await readFile(join(lane, "changes.patch"), "utf8"), patch);
+  succeeds("patch", "--force");
   succeeds("update-patches");
-  assert.equal(await readFile(join(workflow, "tests.patch"), "utf8"), testPatch);
-  assert.equal(await readFile(join(workflow, "changes.patch"), "utf8"), patch);
+  assert.equal(await readFile(join(lane, "changes.patch"), "utf8"), patch);
   assert.equal(await readFile(join(patched, "src/index.ts"), "utf8"), edited);
   assert.deepEqual(await readFile(join(patched, "fixture.bin")), binary);
   await assert.rejects(readFile(join(patched, "src/deleted.ts")), { code: "ENOENT" });
@@ -145,4 +143,15 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   succeeds("transform");
   await assert.rejects(readFile(join(transformed, "src/stale.ts")), { code: "ENOENT" });
   assert.equal(await readFile(join(orig, "src/index.ts"), "utf8"), original);
+  succeeds("update-patches", "--resolutions");
+  // Unsupported majors must fail before --force can remove existing work.
+  const upstreamManifest = JSON.parse(await readFile(join(orig, "package.json"), "utf8"));
+  upstreamManifest.version = "16.14.2";
+  await writeFile(join(orig, "package.json"), JSON.stringify(upstreamManifest));
+  git(["add", "package.json"]);
+  git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "Unsupported major"]);
+  const unsupported = run("patch", "--force");
+  assert.notEqual(unsupported.status, 0);
+  assert.match(unsupported.stderr, /No patch lane for GraphQL 16.14.2/);
+  assert.equal(await readFile(join(patched, "src/index.ts"), "utf8"), edited);
 });

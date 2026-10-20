@@ -1,0 +1,6 @@
+{
+  "major": 17,
+  "base": "c7e494ad58d9aaef49a9174d886b1f322311d77f",
+  "baseTag": "v17.0.0",
+  "patches": ["changes.patch"]
+}
