@@ -12,9 +12,9 @@ node graphql-js/patch.mjs
 npm ci --prefix graphql-js/patched
 ```
 
-The `17` lane starts at `v17.0.0`. Its exact base commit and ordered patch files
-are recorded in `lanes/17/lane.json`. A future `16` lane can have its own base,
-patches, and resolutions, using the same scripts.
+The `17` lane starts at `v17.0.0`; the `16` lane starts at `v16.14.2`.
+Each lane's exact base commit and ordered patch files are recorded in its
+`lane.json`, with independent patches and resolutions using the same scripts.
 The script selects the lane from the upstream package's major version and
 rejects unsupported majors before replacing an existing `patched` checkout.
 
@@ -54,6 +54,10 @@ lane's starting patch.
 Package manifests are configured with `npm pkg set`, and npm updates the root
 lockfile without installing dependencies. Set `SCHEDULE_PACKAGE` to override
 the schedule dependency (for example, an absolute `file:` path for local work).
+
+The v16 fork retains its CJS/ESM output formats but uses Node 24+ and modern
+TypeScript/Babel tooling. It requires TypeScript 6.0+; its declaration tests use
+`nodenext` resolution. Generated declarations use TypeScript's own formatting.
 
 At the lane's base release, edit `patched`, including the memoization adaptations and
 `// @phryneas/schedule may-yield-here` comments. Save those changes with:

@@ -37,11 +37,21 @@ const npm = (args, cwd = patched) => execFileSync("npm", args, {
   cwd, stdio: "inherit",
 });
 const manifest = JSON.parse(await readFile(join(patched, "package.json"), "utf8"));
+const major = Number(manifest.version.split(".")[0]);
 const settings = [
   "name=@phryneas/scheduled-graphql",
   `dependencies.@phryneas/schedule=${process.env.SCHEDULE_PACKAGE ?? "https://pkg.pr.new/phryneas/schedule/@phryneas/schedule@2f05950"}`,
 ];
-if (manifest.engines?.node) {
+if (major === 16) {
+  settings.push(
+    "engines.node=^24.0.0 || ^25.0.0 || >=26.0.0",
+    "devDependencies.typescript=^6.0.3",
+    "devDependencies.@types/node=^24.0.0",
+    ...["@babel/core", "@babel/plugin-syntax-typescript", "@babel/plugin-transform-typescript",
+      "@babel/preset-env", "@babel/register"].map(name => `devDependencies.${name}=^7.28.0`),
+    "scripts.check:integrations=npm run build:npm && mocha --full-trace integrationTests/*-test.js",
+  );
+} else if (manifest.engines?.node) {
   settings.push(`engines.node=${manifest.engines.node.split("||").map(value => value.trim()).filter(value => !value.startsWith("^22.")).join(" || ")}`);
 }
 if (manifest.scripts?.check) {
@@ -55,15 +65,28 @@ if (manifest.scripts?.["check:spelling"]) {
   settings.push(`scripts.check:spelling=${spelling.includes("--gitignore-root") ? spelling : spelling.replace(/\bcspell\b/, "cspell --gitignore-root .")}`);
 }
 npm(["pkg", "set", ...settings]);
+if (major === 16) {
+  npm(["pkg", "set", "--json", 'typesVersions={">=6.0.0":{"*":["*"]}}']);
+}
 
-npm(["pkg", "set",
-  "devDependencies.@babel/plugin-transform-export-namespace-from=^7.27.1",
-  "devDependencies.@babel/plugin-transform-modules-commonjs=^7.27.1",
-], join(patched, "integrationTests/dev-jest"));
+if (existsSync(join(patched, "integrationTests/dev-jest/package.json"))) {
+  npm(["pkg", "set",
+    "devDependencies.@babel/plugin-transform-export-namespace-from=^7.27.1",
+    "devDependencies.@babel/plugin-transform-modules-commonjs=^7.27.1",
+  ], join(patched, "integrationTests/dev-jest"));
+}
 const tsDirectory = join(patched, "integrationTests/ts");
 const tsManifest = JSON.parse(await readFile(join(tsDirectory, "package.json"), "utf8"));
-for (const version of ["4.9", "5.0", "5.1", "5.2"]) {
-  delete tsManifest.dependencies[`typescript-${version}`];
+for (const name of Object.keys(tsManifest.dependencies)) {
+  if (/^typescript-(?:4\.\d+|5\.[012])$/.test(name)) {
+    delete tsManifest.dependencies[name];
+  }
+}
+if (major === 16) {
+  for (const name of Object.keys(tsManifest.dependencies)) {
+    if (name.startsWith("typescript-")) delete tsManifest.dependencies[name];
+  }
+  tsManifest.dependencies["typescript-6.0"] = "npm:typescript@6.0.x";
 }
 npm(["pkg", "set", "--json", `dependencies=${JSON.stringify(tsManifest.dependencies)}`], tsDirectory);
 

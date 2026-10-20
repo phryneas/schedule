@@ -1,0 +1,729 @@
+diff --git a/.babelrc-npm.json b/.babelrc-npm.json
+index 357c91dbc069a30b1e1308200ae141a99256246c..477ab0404670c7d8fef2dda849fe63e928016167 100644
+--- a/.babelrc-npm.json
++++ b/.babelrc-npm.json
+@@ -1,6 +1,7 @@
+ {
+   "plugins": [
+-    "@babel/plugin-transform-typescript",
++    "./resources/remove-type-only-fields",
++    ["@babel/plugin-transform-typescript", { "allowDeclareFields": true }],
+     "./resources/inline-invariant"
+   ],
+   "env": {
+@@ -8,7 +9,7 @@
+       "presets": [
+         [
+           "@babel/preset-env",
+-          { "modules": "commonjs", "targets": { "node": "12" } }
++          { "modules": "commonjs", "targets": { "node": "24" } }
+         ]
+       ],
+       "plugins": [
+@@ -17,7 +18,7 @@
+     },
+     "mjs": {
+       "presets": [
+-        ["@babel/preset-env", { "modules": false, "targets": { "node": "12" } }]
++        ["@babel/preset-env", { "modules": false, "targets": { "node": "24" } }]
+       ],
+       "plugins": [
+         ["./resources/add-extension-to-import-paths", { "extension": "mjs" }]
+diff --git a/.babelrc.json b/.babelrc.json
+index caa5300ad71e50d4136486ff1bef655a7d24193c..1c8ef94f0bd4ab74a8a6b97ba695c466ef2223c3 100644
+--- a/.babelrc.json
++++ b/.babelrc.json
+@@ -1,5 +1,8 @@
+ {
+-  "plugins": ["@babel/plugin-transform-typescript"],
++  "plugins": [
++    "./resources/remove-type-only-fields",
++    ["@babel/plugin-transform-typescript", { "allowDeclareFields": true }]
++  ],
+   "presets": [
+     [
+       "@babel/preset-env",
+diff --git a/.eslintignore b/.eslintignore
+index 74aca39c9da44939d63b508c50dda010ba49d221..92668490975eadba606d1ef62d132c1920040adb 100644
+--- a/.eslintignore
++++ b/.eslintignore
+@@ -9,3 +9,6 @@
+ 
+ # Ignore TS files inside integration test
+ /integrationTests/ts/*.ts
++
++# Generated schedulable code.
++/src
+diff --git a/.node-version b/.node-version
+index 703a257b8b54f58ae090ead10f0813e938f47013..54c65116f15a6832459847f69931fe830411bbbc 100644
+--- a/.node-version
++++ b/.node-version
+@@ -1 +1 @@
+-v17
++v24
+diff --git a/benchmark/benchmark.js b/benchmark/benchmark.js
+index 9288d1f273827bf1bf57ee7709d025539689e72e..052d9cde6b6e90fc5cde097402dc0c36dba40839 100644
+--- a/benchmark/benchmark.js
++++ b/benchmark/benchmark.js
+@@ -59,7 +59,7 @@ function prepareBenchmarkProjects(revisionList) {
+       '{ "private": true }',
+     );
+     exec(
+-      'npm --quiet install --ignore-scripts ' + prepareNPMPackage(revision),
++      'npm --quiet install --ignore-scripts graphql@' + prepareNPMPackage(revision),
+       { cwd: projectPath },
+     );
+     exec(`cp -R ${localDir('benchmark')} ${projectPath}`);
+diff --git a/cspell.yml b/cspell.yml
+index c220a7f6f15fd6cebdd63ac7c89833dc89c5459d..71ac5f335e24dc8293a764771450fe0cb9ddc2ce 100644
+--- a/cspell.yml
++++ b/cspell.yml
+@@ -118,3 +118,5 @@ words:
+   - overcomplicating
+   - cacheable
+   - pino
++  - phryneas
++  - Schedulable
+diff --git a/integrationTests/ts/tsconfig.json b/integrationTests/ts/tsconfig.json
+index 403b4c213f91057a9fb93f52698c2ed8662c3a2d..e3800255cfce7884c31b863262c53d63d89c980a 100644
+--- a/integrationTests/ts/tsconfig.json
++++ b/integrationTests/ts/tsconfig.json
+@@ -1,7 +1,8 @@
+ {
+   "compilerOptions": {
+-    "module": "commonjs",
+-    "lib": ["es2019", "es2020.promise", "es2020.bigint", "es2020.string"],
++    "module": "nodenext",
++    "moduleResolution": "nodenext",
++    "lib": ["es2019", "es2020.promise", "es2020.bigint", "es2020.string", "DOM"],
+     "strict": true,
+     "noEmit": true,
+     "types": []
+diff --git a/resources/build-npm.js b/resources/build-npm.js
+index 7ff0cf079cd606701f8cb0c42d1564807d595b27..9099fe540510947b4d11eab6538aa177ad4f57e6 100644
+--- a/resources/build-npm.js
++++ b/resources/build-npm.js
+@@ -43,7 +43,7 @@ if (require.main === module) {
+     '"tsconfig.json" should have `compilerOptions`',
+   );
+   const tsOptions = {
+-    ...tsConfig.compilerOptions,
++    ...ts.convertCompilerOptionsFromJson(tsConfig.compilerOptions, process.cwd()).options,
+     noEmit: false,
+     declaration: true,
+     declarationDir: './npmDist',
+@@ -52,7 +52,7 @@ if (require.main === module) {
+ 
+   const tsHost = ts.createCompilerHost(tsOptions);
+   tsHost.writeFile = (filepath, body) => {
+-    writeGeneratedFile(filepath, body);
++    fs.writeFileSync(filepath, body);
+   };
+ 
+   const tsProgram = ts.createProgram(['src/index.ts'], tsOptions, tsHost);
+diff --git a/resources/remove-type-only-fields.js b/resources/remove-type-only-fields.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..d952707654f458ffee2645e1f0704c12f5645824
+--- /dev/null
++++ b/resources/remove-type-only-fields.js
+@@ -0,0 +1,20 @@
++'use strict';
++
++// Preserve the field-erasure behavior used by the original v16 build.
++module.exports = function removeTypeOnlyFields() {
++  return {
++    visitor: {
++      Class(path) {
++        for (const field of path.get('body.body')) {
++          if (
++            field.isClassProperty() &&
++            field.node.typeAnnotation &&
++            !field.node.value
++          ) {
++            field.remove();
++          }
++        }
++      },
++    },
++  };
++};
+diff --git a/src/execution/__tests__/simplePubSub.ts b/src/execution/__tests__/simplePubSub.ts
+index 7efdf40e573a64618379418189f398bd0ea6fbff..33f0b6b904abc7b1a5171f9d95a460e751969306 100644
+--- a/src/execution/__tests__/simplePubSub.ts
++++ b/src/execution/__tests__/simplePubSub.ts
+@@ -1,5 +1,8 @@
+ import { invariant } from '../../jsutils/invariant';
+ 
++const asyncDispose: typeof Symbol.asyncDispose =
++  Symbol.asyncDispose ?? Symbol.for('Symbol.asyncDispose');
++
+ /**
+  * Create an AsyncIterator from an EventEmitter. Useful for mocking a
+  * PubSub system for tests.
+@@ -35,6 +38,9 @@ export class SimplePubSub<T> {
+     };
+ 
+     return {
++      async [asyncDispose]() {
++        await this.return();
++      },
+       next(): Promise<IteratorResult<R, void>> {
+         if (!listening) {
+           return Promise.resolve({ value: undefined, done: true });
+diff --git a/src/execution/collectFields.ts b/src/execution/collectFields.ts
+index a24ce6d956563c89c33f65ce584e516b69f5416b..ba24b33603edd1f641b1f5e8958ec8f3d76f2e0b 100644
+--- a/src/execution/collectFields.ts
++++ b/src/execution/collectFields.ts
+@@ -70,6 +70,7 @@ export function collectSubfields(
+   const subFieldNodes = new Map();
+   const visitedFragmentNames = new Set<string>();
+   for (const node of fieldNodes) {
++    // @phryneas/schedule may-yield-here
+     if (node.selectionSet) {
+       collectFieldsImpl(
+         schema,
+@@ -95,6 +96,7 @@ function collectFieldsImpl(
+   visitedFragmentNames: Set<string>,
+ ): void {
+   for (const selection of selectionSet.selections) {
++    // @phryneas/schedule may-yield-here
+     switch (selection.kind) {
+       case Kind.FIELD: {
+         if (!shouldIncludeNode(variableValues, selection)) {
+diff --git a/src/execution/mapAsyncIterator.ts b/src/execution/mapAsyncIterator.ts
+index 38b271febda6d17045857cef0d98a4c07fc03946..0122eeba972fd4fd7e73ea257b75fe70eff24936 100644
+--- a/src/execution/mapAsyncIterator.ts
++++ b/src/execution/mapAsyncIterator.ts
+@@ -1,5 +1,8 @@
+ import type { PromiseOrValue } from '../jsutils/PromiseOrValue';
+ 
++const asyncDispose: typeof Symbol.asyncDispose =
++  Symbol.asyncDispose ?? Symbol.for('Symbol.asyncDispose');
++
+ /**
+  * Given an AsyncIterable and a callback function, return an AsyncIterator
+  * which produces values mapped via calling the callback function.
+@@ -37,6 +40,9 @@ export function mapAsyncIterator<T, U, R = undefined>(
+   }
+ 
+   return {
++    async [asyncDispose](this: { return(): Promise<IteratorResult<U, R>> }) {
++      await this.return();
++    },
+     async next() {
+       return mapResult(await iterator.next());
+     },
+diff --git a/src/jsutils/instanceOf.ts b/src/jsutils/instanceOf.ts
+index b0822d094f843d0aec3451dfaca18ba70f3a625e..9595fce495aa889f73afe50cb265a4ac4aab55b7 100644
+--- a/src/jsutils/instanceOf.ts
++++ b/src/jsutils/instanceOf.ts
+@@ -31,8 +31,7 @@ export const instanceOf: (value: unknown, constructor: Constructor) => boolean =
+           const valueClassName =
+             // We still need to support constructor's name to detect conflicts with older versions of this library.
+             Symbol.toStringTag in value
+-              ? // @ts-expect-error TS bug see, https://github.com/microsoft/TypeScript/issues/38009
+-                value[Symbol.toStringTag]
++              ? value[Symbol.toStringTag]
+               : value.constructor?.name;
+           if (className === valueClassName) {
+             const stringifiedValue = inspect(value);
+diff --git a/src/jsutils/memoize3.ts b/src/jsutils/memoize3.ts
+index d370e7be8f1be9075292e22f4f01837e7306d018..74d15c34e4b571262752e1a2c0cb731b4cf68f30 100644
+--- a/src/jsutils/memoize3.ts
++++ b/src/jsutils/memoize3.ts
+@@ -8,10 +8,14 @@ export function memoize3<
+   A2 extends object,
+   A3 extends object,
+   R,
+->(fn: (a1: A1, a2: A2, a3: A3) => R): (a1: A1, a2: A2, a3: A3) => R {
++>(fn: (a1: A1, a2: A2, a3: A3) => R) {
+   let cache0: WeakMap<A1, WeakMap<A2, WeakMap<A3, R>>>;
+ 
+-  return function memoized(a1, a2, a3) {
++  return /* @phryneas/schedule schedulable */ function memoized(
++    a1: A1,
++    a2: A2,
++    a3: A3,
++  ) {
+     if (cache0 === undefined) {
+       cache0 = new WeakMap();
+     }
+diff --git a/src/jsutils/suggestionList.ts b/src/jsutils/suggestionList.ts
+index 3d2e9baae569edac613d98cee3add8789293984f..b8165a5270af3c48b01719e989442e2ea93235fd 100644
+--- a/src/jsutils/suggestionList.ts
++++ b/src/jsutils/suggestionList.ts
+@@ -15,6 +15,7 @@ export function suggestionList(
+ 
+   const threshold = Math.floor(input.length * 0.4) + 1;
+   for (const option of options) {
++    // @phryneas/schedule may-yield-here
+     const distance = lexicalDistance.measure(option, threshold);
+     if (distance !== undefined) {
+       optionsByDistance[option] = distance;
+@@ -90,10 +91,12 @@ class LexicalDistance {
+ 
+     const rows = this._rows;
+     for (let j = 0; j <= bLength; j++) {
++      // @phryneas/schedule may-yield-here
+       rows[0][j] = j;
+     }
+ 
+     for (let i = 1; i <= aLength; i++) {
++      // @phryneas/schedule may-yield-here
+       const upRow = rows[(i - 1) % 3];
+       const currentRow = rows[i % 3];
+ 
+@@ -135,6 +138,7 @@ function stringToArray(str: string): Array<number> {
+   const strLength = str.length;
+   const array = new Array(strLength);
+   for (let i = 0; i < strLength; ++i) {
++    // @phryneas/schedule may-yield-here
+     array[i] = str.charCodeAt(i);
+   }
+   return array;
+diff --git a/src/language/lexer.ts b/src/language/lexer.ts
+index 6a6d54fe390792fad07149c3c80f603af38a4fc8..5594047f903364e410136b593e67b79f83e271c7 100644
+--- a/src/language/lexer.ts
++++ b/src/language/lexer.ts
+@@ -1,5 +1,7 @@
+ /** @category Lexing */
+ 
++// @phryneas/schedule explicit
++
+ import { syntaxError } from '../error/syntaxError';
+ 
+ import { Token } from './ast';
+diff --git a/src/language/parser.ts b/src/language/parser.ts
+index fc87612b257488f6578760e5fbe1cb913733f518..dc0ff7ffc908b8378d02b5e5d90423b62a552508 100644
+--- a/src/language/parser.ts
++++ b/src/language/parser.ts
+@@ -1,5 +1,7 @@
+ /** @category Parsing */
+ 
++// @phryneas/schedule explicit
++
+ import type { Maybe } from '../jsutils/Maybe';
+ 
+ import type { GraphQLError } from '../error/GraphQLError';
+@@ -175,6 +177,7 @@ export interface ParseOptions {
+  * lexerDocument.definitions[0].kind; // => 'OperationDefinition'
+  * ```
+  */
++// @phryneas/schedule schedulable
+ export function parse(
+   source: string | Source,
+   options?: ParseOptions | undefined,
+@@ -364,6 +367,7 @@ export class Parser {
+    *
+    * @internal
+    */
++  // @phryneas/schedule schedulable
+   parseDocument(): DocumentNode {
+     return this.node<DocumentNode>(this._lexer.token, {
+       kind: Kind.DOCUMENT,
+@@ -401,6 +405,7 @@ export class Parser {
+    * @internal
+    */
+   parseDefinition(): DefinitionNode {
++    // @phryneas/schedule may-yield-here
+     if (this.peek(TokenKind.BRACE_L)) {
+       return this.parseOperationDefinition();
+     }
+@@ -1925,6 +1930,7 @@ export class Parser {
+    *
+    * @internal
+    */
++  // @phryneas/schedule schedulable
+   many<T>(
+     openKind: TokenKind,
+     parseFn: () => T,
+diff --git a/src/language/visitor.ts b/src/language/visitor.ts
+index 0917fc0e9fb8b03f7e4480f1a22e5a80219740c8..20c158968c9d85399ee674ba043f3a251f980cde 100644
+--- a/src/language/visitor.ts
++++ b/src/language/visitor.ts
+@@ -283,6 +283,7 @@ export function visit(
+   /* eslint-enable no-undef-init */
+ 
+   do {
++    // @phryneas/schedule may-yield-here
+     index++;
+     const isLeaving = index === keys.length;
+     const isEdited = isLeaving && edits.length !== 0;
+@@ -296,6 +297,7 @@ export function visit(
+ 
+           let editOffset = 0;
+           for (const [editKey, editValue] of edits) {
++            // @phryneas/schedule may-yield-here
+             const arrayKey = editKey - editOffset;
+             if (editValue === null) {
+               node.splice(arrayKey, 1);
+@@ -307,6 +309,7 @@ export function visit(
+         } else {
+           node = { ...node };
+           for (const [editKey, editValue] of edits) {
++            // @phryneas/schedule may-yield-here
+             node[editKey] = editValue;
+           }
+         }
+@@ -432,8 +435,10 @@ export function visitInParallel(
+     }
+ 
+     const mergedEnterLeave: EnterLeaveVisitor<ASTNode> = {
++      // @phryneas/schedule schedulable
+       enter(...args) {
+         const node = args[0];
++        // @phryneas/schedule may-yield-here
+         for (let i = 0; i < visitors.length; i++) {
+           if (skipping[i] === null) {
+             const result = enterList[i]?.apply(visitors[i], args);
+@@ -447,8 +452,10 @@ export function visitInParallel(
+           }
+         }
+       },
++      // @phryneas/schedule schedulable
+       leave(...args) {
+         const node = args[0];
++        // @phryneas/schedule may-yield-here
+         for (let i = 0; i < visitors.length; i++) {
+           if (skipping[i] === null) {
+             const result = leaveList[i]?.apply(visitors[i], args);
+diff --git a/src/type/validate.ts b/src/type/validate.ts
+index 95fa6c6601726091917be401c63e0755f9abbb39..a132d0f2ca95d560cbb33f14b57496d3f7f6f781 100644
+--- a/src/type/validate.ts
++++ b/src/type/validate.ts
+@@ -253,6 +253,7 @@ function validateTypes(context: SchemaValidationContext): void {
+     createInputObjectCircularRefsValidator(context);
+   const typeMap = context.schema.getTypeMap();
+   for (const type of Object.values(typeMap)) {
++    // @phryneas/schedule may-yield-here
+     // Ensure all provided types are in fact GraphQL type.
+     if (!isNamedType(type)) {
+       context.reportError(
+@@ -310,6 +311,7 @@ function validateFields(
+   }
+ 
+   for (const field of fields) {
++    // @phryneas/schedule may-yield-here
+     // Ensure they are named correctly.
+     validateName(context, field);
+ 
+@@ -324,6 +326,7 @@ function validateFields(
+ 
+     // Ensure the arguments are valid
+     for (const arg of field.args) {
++      // @phryneas/schedule may-yield-here
+       const argName = arg.name;
+ 
+       // Ensure they are named correctly.
+@@ -395,6 +398,7 @@ function validateTypeImplementsInterface(
+ 
+   // Assert each interface field is implemented.
+   for (const ifaceField of Object.values(iface.getFields())) {
++    // @phryneas/schedule may-yield-here
+     const fieldName = ifaceField.name;
+     const typeField = typeFieldMap[fieldName];
+ 
+@@ -420,6 +424,7 @@ function validateTypeImplementsInterface(
+ 
+     // Assert each interface field arg is implemented.
+     for (const ifaceArg of ifaceField.args) {
++      // @phryneas/schedule may-yield-here
+       const argName = ifaceArg.name;
+       const typeArg = typeField.args.find((arg) => arg.name === argName);
+ 
+@@ -550,6 +555,7 @@ function validateInputFields(
+ 
+   // Ensure the arguments are valid
+   for (const field of fields) {
++    // @phryneas/schedule may-yield-here
+     // Ensure they are named correctly.
+     validateName(context, field);
+ 
+@@ -597,7 +603,7 @@ function validateOneOfInputObjectField(
+ 
+ function createInputObjectCircularRefsValidator(
+   context: SchemaValidationContext,
+-): (inputObj: GraphQLInputObjectType) => void {
++) {
+   // Modified copy of algorithm from 'src/validation/rules/NoFragmentCycles.js'.
+   // Tracks already visited types to maintain O(N) and to ensure that cycles
+   // are not redundantly reported.
+@@ -614,6 +620,7 @@ function createInputObjectCircularRefsValidator(
+   // This does a straight-forward DFS to find cycles.
+   // It does not terminate when a cycle was found but continues to explore
+   // the graph to find all possible cycles.
++  // @phryneas/schedule schedulable
+   function detectCycleRecursive(inputObj: GraphQLInputObjectType): void {
+     if (visitedTypes[inputObj.name]) {
+       return;
+@@ -624,6 +631,7 @@ function createInputObjectCircularRefsValidator(
+ 
+     const fields = Object.values(inputObj.getFields());
+     for (const field of fields) {
++      // @phryneas/schedule may-yield-here
+       if (isNonNullType(field.type) && isInputObjectType(field.type.ofType)) {
+         const fieldType = field.type.ofType;
+         const cycleIndex = fieldPathIndexByTypeName[fieldType.name];
+diff --git a/src/utilities/TypeInfo.ts b/src/utilities/TypeInfo.ts
+index 5e4a3d1b22a1dfb088d594911daba502b11220d2..527bc2b91746fdb77941a66bb71b841f4fe6dcae 100644
+--- a/src/utilities/TypeInfo.ts
++++ b/src/utilities/TypeInfo.ts
+@@ -777,6 +777,7 @@ export function visitWithTypeInfo(
+   visitor: ASTVisitor,
+ ): ASTVisitor {
+   return {
++    // @phryneas/schedule schedulable
+     enter(...args) {
+       const node = args[0];
+       typeInfo.enter(node);
+@@ -792,6 +793,7 @@ export function visitWithTypeInfo(
+         return result;
+       }
+     },
++    // @phryneas/schedule schedulable
+     leave(...args) {
+       const node = args[0];
+       const fn = getEnterLeaveForKind(visitor, node.kind).leave;
+diff --git a/src/utilities/coerceInputValue.ts b/src/utilities/coerceInputValue.ts
+index 13115cb390e3c93364c18583bbbbcd92e51c8203..0b2f4eedc225f5e5f8057334f602838f31e0e906 100644
+--- a/src/utilities/coerceInputValue.ts
++++ b/src/utilities/coerceInputValue.ts
+@@ -146,6 +146,7 @@ function coerceInputValueImpl(
+     const fieldDefs = type.getFields();
+ 
+     for (const field of Object.values(fieldDefs)) {
++      // @phryneas/schedule may-yield-here
+       const fieldValue = inputValue[field.name];
+ 
+       if (fieldValue === undefined) {
+@@ -174,6 +175,7 @@ function coerceInputValueImpl(
+ 
+     // Ensure every provided field is defined.
+     for (const fieldName of Object.keys(inputValue)) {
++      // @phryneas/schedule may-yield-here
+       if (!fieldDefs[fieldName]) {
+         const suggestions = suggestionList(
+           fieldName,
+diff --git a/src/utilities/typeComparators.ts b/src/utilities/typeComparators.ts
+index f4935b8e1ff60b6e6772af8d2f9853f2fdc72531..495b51c349fb129a7b5bb6e70b68dd356bfadfb6 100644
+--- a/src/utilities/typeComparators.ts
++++ b/src/utilities/typeComparators.ts
+@@ -186,6 +186,7 @@ export function doTypesOverlap(
+     if (isAbstractType(typeB)) {
+       // If both types are abstract, then determine if there is any intersection
+       // between possible concrete types of each.
++      // @phryneas/schedule transform-to-loop
+       return schema
+         .getPossibleTypes(typeA)
+         .some((type) => schema.isSubType(typeB, type));
+diff --git a/src/utilities/valueFromAST.ts b/src/utilities/valueFromAST.ts
+index 2d43a14d19e6f51c589e7cc094bde27d17e1d974..c3705aee22dd5cbbe4da65e19eaa8136aa4f9f6e 100644
+--- a/src/utilities/valueFromAST.ts
++++ b/src/utilities/valueFromAST.ts
+@@ -122,6 +122,7 @@ export function valueFromAST(
+     if (valueNode.kind === Kind.LIST) {
+       const coercedValues = [];
+       for (const itemNode of valueNode.values) {
++        // @phryneas/schedule may-yield-here
+         if (isMissingVariable(itemNode, variables)) {
+           // If an array contains a missing variable, it is either coerced to
+           // null or if the item type is non-null, it considered invalid.
+@@ -153,6 +154,7 @@ export function valueFromAST(
+     const coercedObj = Object.create(null);
+     const fieldNodes = keyMap(valueNode.fields, (field) => field.name.value);
+     for (const field of Object.values(type.getFields())) {
++      // @phryneas/schedule may-yield-here
+       const fieldNode = fieldNodes[field.name];
+       if (!fieldNode || isMissingVariable(fieldNode.value, variables)) {
+         if (field.defaultValue !== undefined) {
+diff --git a/src/validation/ValidationContext.ts b/src/validation/ValidationContext.ts
+index 45f497c01caf7af6eb901f6a0786a009a8f2e4f1..1b9ba4aa5a19bd7a502b0f7c6bf2660d44cf606a 100644
+--- a/src/validation/ValidationContext.ts
++++ b/src/validation/ValidationContext.ts
+@@ -82,6 +82,7 @@ export class ASTValidationContext {
+     } else {
+       fragments = Object.create(null);
+       for (const defNode of this.getDocument().definitions) {
++        // @phryneas/schedule may-yield-here
+         if (defNode.kind === Kind.FRAGMENT_DEFINITION) {
+           fragments[defNode.name.value] = defNode;
+         }
+@@ -101,6 +102,7 @@ export class ASTValidationContext {
+       let set: SelectionSetNode | undefined;
+       while ((set = setsToVisit.pop())) {
+         for (const selection of set.selections) {
++          // @phryneas/schedule may-yield-here
+           if (selection.kind === Kind.FRAGMENT_SPREAD) {
+             spreads.push(selection);
+           } else if (selection.selectionSet) {
+@@ -123,6 +125,7 @@ export class ASTValidationContext {
+       const nodesToVisit: Array<SelectionSetNode> = [operation.selectionSet];
+       let node: SelectionSetNode | undefined;
+       while ((node = nodesToVisit.pop())) {
++        // @phryneas/schedule may-yield-here
+         for (const spread of this.getFragmentSpreads(node)) {
+           const fragName = spread.name.value;
+           if (collectedNames[fragName] !== true) {
+@@ -370,6 +373,7 @@ export class ValidationContext extends ASTValidationContext {
+     if (!usages) {
+       usages = this.getVariableUsages(operation);
+       for (const frag of this.getRecursivelyReferencedFragments(operation)) {
++        // @phryneas/schedule may-yield-here
+         usages = usages.concat(this.getVariableUsages(frag));
+       }
+       this._recursiveVariableUsages.set(operation, usages);
+diff --git a/src/validation/rules/FieldsOnCorrectTypeRule.ts b/src/validation/rules/FieldsOnCorrectTypeRule.ts
+index cad5323e8450d07e82388437c640d4a6770a0b3f..da339f7a8bb66d89a20c8e50c1fd8e2296f6c9b5 100644
+--- a/src/validation/rules/FieldsOnCorrectTypeRule.ts
++++ b/src/validation/rules/FieldsOnCorrectTypeRule.ts
+@@ -62,6 +62,7 @@ export function FieldsOnCorrectTypeRule(
+   context: ValidationContext,
+ ): ASTVisitor {
+   return {
++    // @phryneas/schedule schedulable
+     Field(node: FieldNode) {
+       const type = context.getParentType();
+       if (type) {
+@@ -117,6 +118,7 @@ function getSuggestedTypeNames(
+     new Set();
+   const usageCount = Object.create(null);
+   for (const possibleType of schema.getPossibleTypes(type)) {
++    // @phryneas/schedule may-yield-here
+     if (!possibleType.getFields()[fieldName]) {
+       continue;
+     }
+@@ -126,6 +128,7 @@ function getSuggestedTypeNames(
+     usageCount[possibleType.name] = 1;
+ 
+     for (const possibleInterface of possibleType.getInterfaces()) {
++      // @phryneas/schedule may-yield-here
+       if (!possibleInterface.getFields()[fieldName]) {
+         continue;
+       }
+diff --git a/src/validation/rules/NoFragmentCyclesRule.ts b/src/validation/rules/NoFragmentCyclesRule.ts
+index 10843dce6b8dcbafbdd9c6bc8b10b28f779cf3bd..cfcc85a66977987eb57cd8f2ef978f97478a3b5a 100644
+--- a/src/validation/rules/NoFragmentCyclesRule.ts
++++ b/src/validation/rules/NoFragmentCyclesRule.ts
+@@ -62,6 +62,7 @@ export function NoFragmentCyclesRule(
+ 
+   return {
+     OperationDefinition: () => false,
++    // @phryneas/schedule schedulable
+     FragmentDefinition(node) {
+       detectCycleRecursive(node);
+       return false;
+@@ -71,6 +72,7 @@ export function NoFragmentCyclesRule(
+   // This does a straight-forward DFS to find cycles.
+   // It does not terminate when a cycle was found but continues to explore
+   // the graph to find all possible cycles.
++  // @phryneas/schedule schedulable
+   function detectCycleRecursive(fragment: FragmentDefinitionNode): void {
+     if (visitedFrags[fragment.name.value]) {
+       return;
+@@ -87,6 +89,7 @@ export function NoFragmentCyclesRule(
+     spreadPathIndexByName[fragmentName] = spreadPath.length;
+ 
+     for (const spreadNode of spreadNodes) {
++      // @phryneas/schedule may-yield-here
+       const spreadName = spreadNode.name.value;
+       const cycleIndex = spreadPathIndexByName[spreadName];
+ 
+diff --git a/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts b/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
+index 0df368b4e274dfbc35a3720833ac114bf00dbae5..7314b76ce4e16ee30ce5d3a2f7aebef0971789bf 100644
+--- a/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
++++ b/src/validation/rules/OverlappingFieldsCanBeMergedRule.ts
+@@ -108,6 +108,7 @@ export function OverlappingFieldsCanBeMergedRule(
+   const cachedFieldsAndFragmentNames = new Map();
+ 
+   return {
++    // @phryneas/schedule schedulable
+     SelectionSet(selectionSet) {
+       const conflicts = findConflictsWithinSelectionSet(
+         context,
+@@ -252,6 +253,7 @@ function findConflictsWithinSelectionSet(
+       // This compares each item in the list of fragment names to every other
+       // item in that same list (except for itself).
+       for (let j = i + 1; j < fragmentNames.length; j++) {
++        // @phryneas/schedule may-yield-here
+         collectConflictsBetweenFragments(
+           context,
+           conflicts,
+@@ -511,6 +513,7 @@ function findConflictsBetweenSubSelectionSets(
+   // names to each item in the second set of names.
+   for (const fragmentName1 of fragmentNames1) {
+     for (const fragmentName2 of fragmentNames2) {
++      // @phryneas/schedule may-yield-here
+       collectConflictsBetweenFragments(
+         context,
+         conflicts,
+@@ -540,12 +543,14 @@ function collectConflictsWithin(
+   // response name. For every response name, if there are multiple fields, they
+   // must be compared to find a potential conflict.
+   for (const [responseName, fields] of Object.entries(fieldMap)) {
++    // @phryneas/schedule may-yield-here
+     // This compares every field in the list to every other field in this list
+     // (except to itself). If the list only has one item, nothing needs to
+     // be compared.
+     if (fields.length > 1) {
+       for (let i = 0; i < fields.length; i++) {
+         for (let j = i + 1; j < fields.length; j++) {
++          // @phryneas/schedule may-yield-here
+           const conflict = findConflict(
+             context,
+             cachedFieldsAndFragmentNames,
+@@ -586,10 +591,12 @@ function collectConflictsBetween(
+   // maps, each field from the first field map must be compared to every field
+   // in the second field map to find potential conflicts.
+   for (const [responseName, fields1] of Object.entries(fieldMap1)) {
++    // @phryneas/schedule may-yield-here
+     const fields2 = fieldMap2[responseName];
+     if (fields2) {
+       for (const field1 of fields1) {
+         for (const field2 of fields2) {
++          // @phryneas/schedule may-yield-here
+           const conflict = findConflict(
+             context,
+             cachedFieldsAndFragmentNames,
+diff --git a/src/validation/rules/PossibleFragmentSpreadsRule.ts b/src/validation/rules/PossibleFragmentSpreadsRule.ts
+index 7e180926caae9f68f23b254d156b31773765fd28..f06c7cbd3bb142dd32eed3f7a116801e3fa4d382 100644
+--- a/src/validation/rules/PossibleFragmentSpreadsRule.ts
++++ b/src/validation/rules/PossibleFragmentSpreadsRule.ts
+@@ -61,6 +61,7 @@ export function PossibleFragmentSpreadsRule(
+   context: ValidationContext,
+ ): ASTVisitor {
+   return {
++    // @phryneas/schedule schedulable
+     InlineFragment(node) {
+       const fragType = context.getType();
+       const parentType = context.getParentType();
+@@ -79,6 +80,7 @@ export function PossibleFragmentSpreadsRule(
+         );
+       }
+     },
++    // @phryneas/schedule schedulable
+     FragmentSpread(node) {
+       const fragName = node.name.value;
+       const fragType = getFragmentType(context, fragName);
+diff --git a/tsconfig.json b/tsconfig.json
+index 8dfb0f479481c8f81e16111ce67a408d7d1f5216..3465f53c38562aabb47b6a0759c9fc7ca62c4ff2 100644
+--- a/tsconfig.json
++++ b/tsconfig.json
+@@ -1,14 +1,15 @@
+ {
+   "include": ["src/**/*"],
+   "compilerOptions": {
+-    "module": "commonjs",
+-    "lib": ["es2019", "es2020.promise", "es2020.bigint", "es2020.string"],
++    "module": "nodenext",
++    "moduleResolution": "nodenext",
++    "types": ["node", "mocha"],
++    "lib": ["es2024"],
+     "target": "es2019",
+     "strict": true,
+     "useUnknownInCatchVariables": false,
+     "noEmit": true,
+     "isolatedModules": true,
+-    "importsNotUsedAsValues": "error",
+     "forceConsistentCasingInFileNames": true
+   }
+ }

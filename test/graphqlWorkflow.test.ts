@@ -146,12 +146,12 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   succeeds("update-patches", "--resolutions");
   // Unsupported majors must fail before --force can remove existing work.
   const upstreamManifest = JSON.parse(await readFile(join(orig, "package.json"), "utf8"));
-  upstreamManifest.version = "16.14.2";
+  upstreamManifest.version = "18.0.0";
   await writeFile(join(orig, "package.json"), JSON.stringify(upstreamManifest));
   git(["add", "package.json"]);
   git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "Unsupported major"]);
   const unsupported = run("patch", "--force");
   assert.notEqual(unsupported.status, 0);
-  assert.match(unsupported.stderr, /No patch lane for GraphQL 16.14.2/);
+  assert.match(unsupported.stderr, /No patch lane for GraphQL 18.0.0/);
   assert.equal(await readFile(join(patched, "src/index.ts"), "utf8"), edited);
 });
