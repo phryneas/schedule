@@ -1,0 +1,10 @@
+{
+  "name": "@phryneas/scheduled-graphql-16",
+  "version": "0.0.1",
+  "private": true,
+  "files": ["dist"],
+  "scripts": {
+    "prebuild": "node ../../graphql-js/build-workspace.mjs prepare 16",
+    "build": "node ../../graphql-js/build-workspace.mjs build 16"
+  }
+}

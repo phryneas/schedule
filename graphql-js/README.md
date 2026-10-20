@@ -93,5 +93,29 @@ building it, including `@phryneas/schedule` as required by its generated imports
 uncommitted edits there are not copied into `patched`. To change upstream versions,
 save your patch, remove `orig`, and clone again with the desired branch or tag.
 
-The entire `graphql-js` directory is outside both workspace packages. Each
-package's `files` allowlist includes only `dist`.
+The entire `graphql-js` directory is outside the published packages.
+
+`packages/graphql-16` and `packages/graphql-17` are private build workspaces.
+Their `prebuild` scripts prepare the latest stable release in their own ignored
+`.tmp` directories; their `build` scripts check types, run runtime tests, and
+produce complete npm packages in `dist`. Publish those `dist` directories, not
+the private workspace manifests. The upstream package exports are preserved.
+
+The root `npm run build` builds the scheduler and codemod first, then both GraphQL
+workspaces. To rebuild just one GraphQL major after building those dependencies:
+
+```sh
+npm run build -w @phryneas/scheduled-graphql-16
+```
+
+The manual scripts still use `graphql-js/orig`, `patched`, and `transformed` by
+default. `GRAPHQL_WORK_DIR` selects another working directory; the workspace
+builds use this to leave manual checkouts untouched.
+
+On each push, `preview.yml` also builds the latest stable npm release of GraphQL
+16 and 17 using these lanes. Both must pass TypeScript checks and runtime tests
+before publishing. The GraphQL packages and workspace packages are published
+together, so each GraphQL preview depends on the scheduler from the same commit.
+The built previews are named `@phryneas/scheduled-graphql-16` and
+`@phryneas/scheduled-graphql-17` to distinguish the two majors.
+The workflow summary records the upstream versions used.

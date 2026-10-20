@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 export const root = fileURLToPath(new URL("./", import.meta.url));
-export const orig = fileURLToPath(new URL("./orig", import.meta.url));
-export const patched = fileURLToPath(new URL("./patched", import.meta.url));
-export const transformed = fileURLToPath(new URL("./transformed", import.meta.url));
+const workDirectory = resolve(process.env.GRAPHQL_WORK_DIR ?? root);
+export const orig = resolve(workDirectory, "orig");
+export const patched = resolve(workDirectory, "patched");
+export const transformed = resolve(workDirectory, "transformed");
 export const optionalTestFiles = [
   "src/language/__tests__/parser-test.ts",
   "src/language/__tests__/visitor-test.ts",

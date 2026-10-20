@@ -8,9 +8,9 @@
   "author": "Lenz Weber-Tronic",
   "type": "module",
   "scripts": {
-    "test": "npm run test --workspaces && node --test test/*.test.ts",
-    "test:types": "npm run test:types --workspaces",
-    "build": "npm run build --workspaces"
+    "test": "npm run test --workspaces --if-present && node --test test/*.test.ts",
+    "test:types": "npm run test:types --workspaces --if-present",
+    "build": "npm run build -w @phryneas/schedule -w @phryneas/schedule-codemod && npm run build -w @phryneas/scheduled-graphql-16 -w @phryneas/scheduled-graphql-17"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
