@@ -19,7 +19,7 @@ test("directives make a loop schedulable and yield at the marked positions", asy
 `, "fixture.js", { runtimeModule });
   assert.doesNotMatch(output, /may-yield-here/);
   assert.match(output, /Keep this ordinary comment/);
-  assert.match(output, /if \(_signal.shouldYield\)/);
+  assert.match(output, /if \(\(_signal \?\?= yield\* _commands.getSignal\(\)\).shouldYield\)/);
   const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
   assert.equal(module.sum([1, 2, 3]), 6);
   assert.equal(await scheduled(module.sum)([1, 2, 3]), 6);
@@ -38,7 +38,7 @@ test("directives make a loop schedulable and yield at the marked positions", asy
   }
 });
 
-test("multiple checkpoints share a signal and avoid existing variable names", () => {
+test("multiple checkpoints share a signal and avoid existing variable names", async () => {
   const output = transformSource(`export function work(signal, _signal) {
   // @phryneas/schedule may-yield-here
   if (signal) {
@@ -46,10 +46,13 @@ test("multiple checkpoints share a signal and avoid existing variable names", ()
   }
   // @phryneas/schedule may-yield-here
   return _signal;
-}`, "fixture.js");
-  assert.equal((output.match(/\.getSignal\(\)/g) ?? []).length, 1);
+}`, "fixture.js", { runtimeModule });
   assert.equal((output.match(/\.yieldNow\(\)/g) ?? []).length, 3);
   assert.match(output, /const _signal2 = yield\*/);
+  const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
+  const iterator = module.work[schedulableImplementationSignal](true, 7);
+  assert.deepEqual(iterator.next().value, { kind: "getSignal" });
+  assert.deepEqual(iterator.next({ shouldYield: false }), { done: true, value: 7 });
 });
 
 test("directives in excluded functions and unsupported positions report errors", () => {

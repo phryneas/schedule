@@ -3,3 +3,4 @@ dist
 .tmp
 *.tgz
 /packages/schedule/README.md
+*.graphql

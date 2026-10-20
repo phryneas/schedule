@@ -34,6 +34,13 @@ export default function schedulerPlugin(
         const localCalls = new WeakSet<Types.CallExpression>();
         const optedIn = new WeakSet<Types.Node>();
         const synchronousCalls = new WeakSet<Types.Node>();
+        const explicitScopes = new WeakSet<Types.Node>();
+        function isExplicit(path: NodePath): boolean {
+          for (let scope: NodePath | null = path; scope; scope = scope.parentPath) {
+            if (explicitScopes.has(scope.node)) return true;
+          }
+          return false;
+        }
         let used = false;
         let usedCommands = false;
         let usedRuntimeMarker = false;
@@ -135,6 +142,28 @@ export default function schedulerPlugin(
             for (const comment of node[key] ?? []) comments.add(comment);
           }
         });
+        for (const comment of comments) {
+          if (comment.value.trim() !== "@phryneas/schedule explicit") continue;
+          const start = comment.start!;
+          const end = comment.end!;
+          const source = state.file.code;
+          const lineStart = source.lastIndexOf("\n", start - 1) + 1;
+          const lineEnd = source.indexOf("\n", end);
+          let scope: NodePath<Types.Program | Types.BlockStatement> = program;
+          program.traverse({
+            BlockStatement(block) {
+              if (block.node.start! < start && block.node.end! > end &&
+                  (scope.isProgram() || block.node.start! > scope.node.start!)) scope = block;
+            },
+          });
+          const statements = [...scope.node.directives, ...scope.node.body];
+          if (source.slice(lineStart, start).trim() || source.slice(end, lineEnd < 0 ? source.length : lineEnd).trim() ||
+              statements.some(statement => statement.start! < start &&
+                (scope.isBlockStatement() || statement.end! > end))) {
+            throw program.buildCodeFrameError("explicit must be a standalone comment at file scope or before the first statement of a braced block.");
+          }
+          explicitScopes.add(scope.node);
+        }
         for (const comment of comments) {
           if (comment.value.trim() !== "@phryneas/schedule synchronous") continue;
           let target: Types.Node | undefined;
@@ -343,7 +372,6 @@ export default function schedulerPlugin(
         }
 
         function transformCalls(path: NodePath<any>, signal?: Types.Identifier) {
-          const hadSignal = !!signal;
           const body = path.get("body") as NodePath;
           const directSuperCalls: NodePath<Types.CallExpression>[] = [];
           let processingDirectSuper = false;
@@ -356,7 +384,7 @@ export default function schedulerPlugin(
                 const node = call.node;
                 const info = options.analysis?.calls.get(node.end!);
                 const cached = info?.targets?.every(target => options.analysis?.commandTargets?.get(target.file)?.has(target.end));
-                const direct = synchronousCalls.has(node) || info?.direct || !!(info?.targets && options.analysis?.commandTargets &&
+                const direct = isExplicit(call) || synchronousCalls.has(node) || info?.direct || !!(info?.targets && options.analysis?.commandTargets &&
                   info.targets.every(target => !options.analysis!.commandTargets!.get(target.file)?.has(target.end)));
                 const superMethod = t.isMemberExpression(node.callee) && t.isSuper(node.callee.object);
                 if (direct && superMethod && !processingDirectSuper) {
@@ -462,7 +490,7 @@ export default function schedulerPlugin(
             OptionalCallExpression(call: NodePath<Types.OptionalCallExpression>) {
               const node = call.node;
               const info = options.analysis?.calls.get(node.end!);
-              if (synchronousCalls.has(node) || info?.direct || (info?.targets && options.analysis?.commandTargets &&
+              if (isExplicit(call) || synchronousCalls.has(node) || info?.direct || (info?.targets && options.analysis?.commandTargets &&
                 info.targets.every(target => !options.analysis!.commandTargets!.get(target.file)?.has(target.end)))) return;
               const target = path.scope.generateUidIdentifier("optional");
               path.scope.push({ id: clone(target), kind: "let" });
@@ -510,8 +538,80 @@ export default function schedulerPlugin(
             processingDirectSuper = true;
             for (const call of directSuperCalls) visitor.CallExpression.exit(call);
           }
-          if (signal && !hadSignal) path.node.body.body.unshift(t.variableDeclaration("const", [t.variableDeclarator(clone(signal),
-            t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("getSignal")), []), true))]));
+          return signal;
+        }
+
+        function insertSignal(path: NodePath<any>, signal: Types.Identifier) {
+          const body = path.get("body") as NodePath<Types.BlockStatement>;
+          const references: NodePath<Types.Identifier>[] = [];
+          let needsEagerSignal = false;
+          body.traverse({
+            Function(inner) { inner.skip(); },
+            Class(inner) { inner.skip(); },
+            Identifier(reference) {
+              if (reference.node.name !== signal.name) return;
+              references.push(reference);
+              for (let ancestor: NodePath | null = reference.parentPath; ancestor && ancestor !== path; ancestor = ancestor.parentPath) {
+                // Acquisition must not become catchable or trigger a finally
+                // block that would not have run with acquisition at entry.
+                if (ancestor.isTryStatement()) needsEagerSignal = true;
+              }
+            },
+          });
+          // A checkpoint reached unconditionally at function level gains nothing
+          // from lazy acquisition. Stay conservative about branches and exits.
+          function unconditionalStatement(reference: NodePath): NodePath | undefined {
+            let current = reference;
+            while (!current.parentPath?.isBlockStatement()) {
+              const parent = current.parentPath;
+              if (!parent || parent.isLoop() || parent.isSwitchCase() ||
+                  parent.isIfStatement() && current.key !== "test" ||
+                  parent.isConditionalExpression() && current.key !== "test" ||
+                  parent.isLogicalExpression() && current.key === "right" ||
+                  parent.isAssignmentExpression() && ["&&=", "||=", "??="].includes(parent.node.operator) && current.key === "right" ||
+                  parent.isAssignmentExpression() && (t.isObjectPattern(parent.node.left) || t.isArrayPattern(parent.node.left)) ||
+                  parent.isVariableDeclarator() && !t.isIdentifier(parent.node.id) ||
+                  parent.isOptionalCallExpression() || parent.isOptionalMemberExpression()) return undefined;
+              current = parent;
+            }
+            return current;
+          }
+          const first = references[0] && unconditionalStatement(references[0]);
+          if (first?.parentPath === body) {
+            let canExit = false;
+            for (const statement of body.get("body")) {
+              if (statement === first) break;
+              if (statement.isReturnStatement() || statement.isThrowStatement()) canExit = true;
+              statement.traverse({
+                Function(inner) { inner.skip(); },
+                Class(inner) { inner.skip(); },
+                "ReturnStatement|ThrowStatement"() { canExit = true; },
+              });
+            }
+            if (!canExit) needsEagerSignal = true;
+          }
+          const acquisition = () => t.yieldExpression(t.callExpression(
+            t.memberExpression(clone(commands), t.identifier("getSignal")), []), true);
+          if (needsEagerSignal) {
+            body.node.body.unshift(t.variableDeclaration("const", [t.variableDeclarator(clone(signal), acquisition())]));
+          } else {
+            // For the expressions accepted above, traversal follows evaluation
+            // order (destructuring is excluded because its RHS runs first). Once an
+            // unconditional checkpoint in a block has run, later references in
+            // that block can use the signal directly (including the assignment
+            // value after a computed property key).
+            const initializedBlocks = new Set<Types.Node>();
+            for (const reference of references) {
+              const statement = reference.findParent(parent => parent.parentPath?.isBlockStatement() ?? false);
+              const block = statement?.parentPath?.node;
+              const unconditional = unconditionalStatement(reference);
+              if (!block || !initializedBlocks.has(block)) {
+                reference.replaceWith(t.assignmentExpression("??=", clone(signal), acquisition()));
+              }
+              if (unconditional) initializedBlocks.add(unconditional.parentPath!.node);
+            }
+            body.node.body.unshift(t.variableDeclaration("let", [t.variableDeclarator(clone(signal))]));
+          }
         }
 
         for (const path of functions.reverse()) {
@@ -533,10 +633,9 @@ export default function schedulerPlugin(
               const index = block.node.body.findIndex(statement => statement.start! > comment.end!);
               block.node.body.splice(index < 0 ? block.node.body.length : index, 0, check);
             }
-            path.node.body.body.unshift(t.variableDeclaration("const", [t.variableDeclarator(clone(signal),
-              t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("getSignal")), []), true))]));
           }
-          transformCalls(path, signal);
+          signal = transformCalls(path, signal);
+          if (signal) insertSignal(path, signal);
           if (!hasYield(path) && !optedIn.has(path.node)) {
             path.node.body = originalBody;
             continue;

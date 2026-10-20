@@ -58,6 +58,24 @@ inside that function. Use `may-yield-here` separately for loop checkpoints.
 Async functions, existing generators, constructors, accessors, type guards,
 and configured exclusions still cannot be opted in.
 
+Use `// @phryneas/schedule explicit` at file scope to keep calls throughout the
+file synchronous. At the start of a braced block, it applies only to that block
+and its nested scopes. Add `may-yield-here` comments where you want to allow
+the function to yield:
+
+```ts
+function work(items) {
+  // @phryneas/schedule explicit
+  for (const item of items) {
+    // @phryneas/schedule may-yield-here
+    process(item);
+  }
+}
+```
+
+Calls to schedulable functions inside an explicit scope also run synchronously;
+their checkpoints do not suspend the outer scheduler.
+
 Use `// @phryneas/schedule synchronous` immediately before a call, or a
 return, assignment, or single-variable declaration whose value is a call, to
 preserve that invocation without scheduling it:

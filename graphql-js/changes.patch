@@ -397,8 +397,89 @@ index caae33ae6e671689270c1382309e7717dce14b2c..48e4af01014a2511f4090cdd5720c1b2
      array[i] = str.charCodeAt(i);
    }
    return array;
+diff --git a/src/language/__tests__/parser-test.ts b/src/language/__tests__/parser-test.ts
+index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..ef35338d3646d5a8a71e0d75ee36eaedb94a67a7 100644
+--- a/src/language/__tests__/parser-test.ts
++++ b/src/language/__tests__/parser-test.ts
+@@ -1,5 +1,11 @@
+ import { describe, it } from 'node:test';
+ 
++import {
++  async as scheduled,
++  commands,
++  makeSchedulable,
++  schedulableImplementationSignal,
++} from '@phryneas/schedule';
+ import { expect } from 'chai';
+ 
+ import { dedent } from '../../__testUtils__/dedent.ts';
+@@ -24,6 +30,7 @@ import {
+   parseSchemaCoordinate,
+   parseType,
+   parseValue,
++  Parser,
+ } from '../parser.ts';
+ import { Source } from '../source.ts';
+ import { TokenKind } from '../tokenKind.ts';
+@@ -33,6 +40,56 @@ function expectSyntaxError(text: string, options?: ParseOptions) {
+ }
+ 
+ describe('Parser', () => {
++  it(
++    'yields between definitions while parsing each definition synchronously',
++    {
++      skip: !(schedulableImplementationSignal in parse),
++    },
++    async (t) => {
++      const source =
++        'type Query { a: String b: String } scalar First scalar Second';
++      const expected = parse(source);
++      const events: Array<string> = [];
++      const original = Parser.prototype.parseDefinition;
++      t.mock.method(
++        Parser.prototype,
++        'parseDefinition',
++        function (this: Parser) {
++          events.push('definition');
++          return original.call(this);
++        },
++      );
++      let expired = true;
++      const signal = {
++        aborted: false,
++        throwIfAborted() {},
++        get shouldYield() {
++          events.push('check');
++          return expired;
++        },
++        bump() {
++          events.push('yield');
++          expired = false;
++        },
++      };
++      const run = makeSchedulable(function* () {
++        return yield* commands.execute(parse, true)(source);
++      });
++      const result = await scheduled(run, signal)();
++      expect(result).to.deep.equal(expected);
++      expect(result.tokenCount).to.equal(expected.tokenCount);
++      expect(events).to.deep.equal([
++        'check',
++        'yield',
++        'definition',
++        'check',
++        'definition',
++        'check',
++        'definition',
++      ]);
++    },
++  );
++
+   it('parse provides useful errors', () => {
+     const caughtError = expectToThrow(() => parse('{'));
+ 
 diff --git a/src/language/__tests__/visitor-test.ts b/src/language/__tests__/visitor-test.ts
-index f6f05199a057ce2a245fef6be90833e2b3f23ca9..1d0b405657d3ac1c87091dfa9c131d21596ee6f4 100644
+index f6f05199a057ce2a245fef6be90833e2b3f23ca9..b774fd1c69e639abbba3d8de232b1d5192fbb7cb 100644
 --- a/src/language/__tests__/visitor-test.ts
 +++ b/src/language/__tests__/visitor-test.ts
 @@ -1,5 +1,10 @@
@@ -467,104 +548,102 @@ index f6f05199a057ce2a245fef6be90833e2b3f23ca9..1d0b405657d3ac1c87091dfa9c131d21
    it('handles empty visitor', () => {
      const ast = parse('{ a }', { noLocation: true });
      expect(() => visit(ast, {})).to.not.throw();
+@@ -938,6 +991,39 @@ describe('Visitor', () => {
+   });
+ 
+   describe('visitInParallel', () => {
++    it('resets skipping for an enter-only visitor among sparse visitors', () => {
++      const events: Array<string> = [];
++      visit(
++        parse('{ a { x } b }'),
++        visitInParallel([
++          {},
++          {
++            Field(node) {
++              events.push(`enter:${node.name.value}`);
++              if (node.name.value === 'a') {
++                return false;
++              }
++            },
++          },
++          {},
++          {
++            Field: {
++              leave(node) {
++                events.push(`leave:${node.name.value}`);
++              },
++            },
++          },
++        ]),
++      );
++      expect(events).to.deep.equal([
++        'enter:a',
++        'leave:x',
++        'leave:a',
++        'enter:b',
++        'leave:b',
++      ]);
++    });
++
+     // Note: nearly identical to the above test of the same test but
+     // using visitInParallel.
+     it('allows skipping a sub-tree', () => {
 diff --git a/src/language/lexer.ts b/src/language/lexer.ts
-index 6e33612bc1019dc10757c1d10d24b0511206fd7b..ef4eba2c27311b817eaf42106c41ee94258337b9 100644
+index 6e33612bc1019dc10757c1d10d24b0511206fd7b..3920c6d7bc118d86a02b5501d7ef39c77e98e82f 100644
 --- a/src/language/lexer.ts
 +++ b/src/language/lexer.ts
-@@ -258,6 +258,7 @@ function readNextToken(lexer: Lexer, start: number): Token {
-   let position = start;
+@@ -1,5 +1,7 @@
+ /** @category Lexing */
  
-   while (position < bodyLength) {
-+    // @phryneas/schedule may-yield-here
-     const code = body.charCodeAt(position);
++// @phryneas/schedule explicit
++
+ import { syntaxError } from '../error/syntaxError.ts';
  
-     // SourceCharacter
-@@ -414,6 +415,7 @@ function readComment(lexer: Lexer, start: number): Token {
-   let position = start + 1;
- 
-   while (position < bodyLength) {
-+    // @phryneas/schedule may-yield-here
-     const code = body.charCodeAt(position);
- 
-     // LineTerminator (\n | \r)
-@@ -564,6 +566,7 @@ function readDigits(lexer: Lexer, start: number, firstCode: number): number {
-   let position = start + 1; // +1 to skip first firstCode
- 
-   while (isDigit(body.charCodeAt(position))) {
-+    // @phryneas/schedule may-yield-here
-     ++position;
-   }
- 
-@@ -600,6 +603,7 @@ function readString(lexer: Lexer, start: number): Token {
-   let value = '';
- 
-   while (position < bodyLength) {
-+    // @phryneas/schedule may-yield-here
-     const code = body.charCodeAt(position);
- 
-     // Closing Quote (")
-@@ -844,6 +848,7 @@ function readBlockString(lexer: Lexer, start: number): Token {
- 
-   const blockLines = [];
-   while (position < bodyLength) {
-+    // @phryneas/schedule may-yield-here
-     const code = body.charCodeAt(position);
- 
-     // Closing Triple-Quote (""")
-@@ -935,6 +940,7 @@ export function readName(lexer: LexerInterface, start: number): Token {
-   let position = start + 1;
- 
-   while (position < bodyLength) {
-+    // @phryneas/schedule may-yield-here
-     const code = body.charCodeAt(position);
-     if (isNameContinue(code)) {
-       ++position;
+ import { Token } from './ast.ts';
 diff --git a/src/language/parser.ts b/src/language/parser.ts
-index 958f9c7773114add14f7f3738db7472d49f077dc..4c3cd9f217dd939ea79d7ff53bb613418cf81320 100644
+index 958f9c7773114add14f7f3738db7472d49f077dc..e5d073e7e85c714f2129ed26062fbffd580eb349 100644
 --- a/src/language/parser.ts
 +++ b/src/language/parser.ts
-@@ -970,6 +970,7 @@ export class Parser {
-   parseDirectives(isConst: boolean): Array<DirectiveNode> | undefined {
-     const directives = [];
-     while (this.peek(TokenKind.AT)) {
-+      // @phryneas/schedule may-yield-here
-       directives.push(this.parseDirective(isConst));
-     }
-     if (directives.length) {
-@@ -1939,6 +1940,7 @@ export class Parser {
-     this.expectToken(openKind);
-     const nodes = [];
-     while (!this.expectOptionalToken(closeKind)) {
-+      // @phryneas/schedule may-yield-here
-       nodes.push(parseFn.call(this));
-     }
-     return nodes;
-@@ -1960,6 +1962,7 @@ export class Parser {
-     if (this.expectOptionalToken(openKind)) {
-       const nodes = [];
-       do {
-+        // @phryneas/schedule may-yield-here
-         nodes.push(parseFn.call(this));
-       } while (!this.expectOptionalToken(closeKind));
-       return nodes;
-@@ -1982,6 +1985,7 @@ export class Parser {
-     this.expectToken(openKind);
-     const nodes = [];
-     do {
-+      // @phryneas/schedule may-yield-here
-       nodes.push(parseFn.call(this));
-     } while (!this.expectOptionalToken(closeKind));
-     return nodes;
-@@ -1999,6 +2003,7 @@ export class Parser {
+@@ -1,5 +1,7 @@
+ /** @category Parsing */
  
-     const nodes = [];
-     do {
-+      // @phryneas/schedule may-yield-here
-       nodes.push(parseFn.call(this));
-     } while (this.expectOptionalToken(delimiterKind));
-     return nodes;
++// @phryneas/schedule explicit
++
+ import type { Maybe } from '../jsutils/Maybe.ts';
+ 
+ import type { GraphQLError } from '../error/GraphQLError.ts';
+@@ -192,9 +194,26 @@ export function parse(
+   source: string | Source,
+   options?: ParseOptions,
+ ): DocumentNode {
+-  return shouldTrace(parseChannel)
+-    ? parseChannel.traceSync(() => parseImpl(source, options), { source })
+-    : parseImpl(source, options);
++  if (shouldTrace(parseChannel)) {
++    return parseChannel.traceSync(() => parseImpl(source, options), { source });
++  }
++
++  const parser = new Parser(source, options);
++  const start = parser.expectToken(TokenKind.SOF);
++  const definitions: Array<DefinitionNode> = [];
++  do {
++    // @phryneas/schedule may-yield-here
++    definitions.push(parser.parseDefinition());
++  } while (!parser.expectOptionalToken(TokenKind.EOF));
++  const document = parser.node<DocumentNode>(start, {
++    kind: Kind.DOCUMENT,
++    definitions,
++  });
++  Object.defineProperty(document, 'tokenCount', {
++    enumerable: false,
++    value: parser.tokenCount,
++  });
++  return document;
+ }
+ 
+ function parseImpl(
 diff --git a/src/language/visitor.ts b/src/language/visitor.ts
-index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..090c34268fe8de6eb0f4eedc12bc6e0af3ec07f8 100644
+index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..007b6fc4cf00a19f9f23a118c4b99a01012eac36 100644
 --- a/src/language/visitor.ts
 +++ b/src/language/visitor.ts
 @@ -273,15 +273,16 @@ export function visit(
@@ -613,27 +692,54 @@ index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..090c34268fe8de6eb0f4eedc12bc6e0a
  
        if (result === BREAK) {
          break;
-@@ -439,9 +444,11 @@ export function visitInParallel(
+@@ -426,12 +431,22 @@ export function visitInParallel(
+     let hasVisitor = false;
+     const enterList = new Array(visitors.length).fill(undefined);
+     const leaveList = new Array(visitors.length).fill(undefined);
++    const enterIndexes: Array<number> = [];
++    const leaveIndexes: Array<number> = [];
+ 
+     for (let i = 0; i < visitors.length; ++i) {
+       const { enter, leave } = getEnterLeaveForKind(visitors[i], kind);
+       hasVisitor ||= enter != null || leave != null;
+       enterList[i] = enter;
+       leaveList[i] = leave;
++      if (enter != null) {
++        enterIndexes.push(i);
++      }
++      // An enter callback can skip this node's children. Its leave pass must
++      // clear that state even when the visitor has no leave callback.
++      if (enter != null || leave != null) {
++        leaveIndexes.push(i);
++      }
+     }
+ 
+     if (!hasVisitor) {
+@@ -439,9 +454,12 @@ export function visitInParallel(
      }
  
      const mergedEnterLeave: EnterLeaveVisitor<ASTNode> = {
 +      // @phryneas/schedule schedulable
        enter(...args) {
          const node = args[0];
-         for (let i = 0; i < visitors.length; i++) {
-+          // @phryneas/schedule may-yield-here
+-        for (let i = 0; i < visitors.length; i++) {
++        // @phryneas/schedule may-yield-here
++        for (let index = 0; index < enterIndexes.length; index++) {
++          const i = enterIndexes[index];
            if (skipping[i] === null) {
              const result = enterList[i]?.apply(visitors[i], args);
              if (result === false) {
-@@ -454,9 +461,11 @@ export function visitInParallel(
+@@ -454,9 +472,12 @@ export function visitInParallel(
            }
          }
        },
 +      // @phryneas/schedule schedulable
        leave(...args) {
          const node = args[0];
-         for (let i = 0; i < visitors.length; i++) {
-+          // @phryneas/schedule may-yield-here
+-        for (let i = 0; i < visitors.length; i++) {
++        // @phryneas/schedule may-yield-here
++        for (let index = 0; index < leaveIndexes.length; index++) {
++          const i = leaveIndexes[index];
            if (skipping[i] === null) {
              const result = leaveList[i]?.apply(visitors[i], args);
              if (result === BREAK) {
