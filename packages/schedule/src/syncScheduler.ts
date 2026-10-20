@@ -47,6 +47,8 @@ export function executeIterableSync<T>(iterable: SchedulableIterable<T>): T {
         break;
       }
       case "yield": {
+        // A defined resumption value completes the reusable yield command.
+        nextArg = null;
         break;
       }
       case "execute": {

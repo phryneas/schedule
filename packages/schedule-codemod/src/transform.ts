@@ -472,7 +472,7 @@ export default function schedulerPlugin(
                   signal ??= path.scope.generateUidIdentifier("signal");
                   before.unshift(t.logicalExpression("&&",
                     t.memberExpression(clone(signal), t.identifier("shouldYield")),
-                    t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("yieldNow")), []), true)));
+                    t.yieldExpression(t.memberExpression(clone(commands), t.identifier("yieldNow")), true)));
                   if (!t.isIdentifier(fn)) {
                     const target = path.scope.generateUidIdentifier("callee");
                     path.scope.push({ id: clone(target), kind: "let" });
@@ -610,8 +610,8 @@ export default function schedulerPlugin(
             }
             if (!canExit) needsEagerSignal = true;
           }
-          const acquisition = () => t.yieldExpression(t.callExpression(
-            t.memberExpression(clone(commands), t.identifier("getSignal")), []), true);
+          const acquisition = () => t.yieldExpression(
+            t.memberExpression(clone(commands), t.identifier("getSignal")), true);
           if (needsEagerSignal) {
             body.node.body.unshift(t.variableDeclaration("const", [t.variableDeclarator(clone(signal), acquisition())]));
           } else {
@@ -648,7 +648,7 @@ export default function schedulerPlugin(
             signal = path.scope.generateUidIdentifier("signal");
             for (const { block, comment } of [...checkpoints].reverse()) {
               const check = t.ifStatement(t.memberExpression(clone(signal), t.identifier("shouldYield")), t.blockStatement([
-                t.expressionStatement(t.yieldExpression(t.callExpression(t.memberExpression(clone(commands), t.identifier("yieldNow")), []), true)),
+                t.expressionStatement(t.yieldExpression(t.memberExpression(clone(commands), t.identifier("yieldNow")), true)),
               ]));
               const index = block.node.body.findIndex(statement => statement.start! > comment.end!);
               block.node.body.splice(index < 0 ? block.node.body.length : index, 0, check);

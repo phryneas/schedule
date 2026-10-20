@@ -12,10 +12,10 @@ import type { SchedulableIterable } from "../src/index.ts";
 const sum = makeSchedulable(function* (
   values: number[],
 ): SchedulableIterable<number> {
-  const signal = yield* getSignal();
+  const signal = yield* getSignal;
   let total = 0;
   for (const value of values) {
-    if (signal.shouldYield) yield* yieldNow();
+    if (signal.shouldYield) yield* yieldNow;
     total += value;
   }
   return total;

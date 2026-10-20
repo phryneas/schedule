@@ -202,7 +202,7 @@ test("optional methods preserve receivers, getter evaluation, and conditional ar
           events.push("get");
           return present ? makeSchedulable(function* (this: typeof receiver, value: number) {
             assert.equal(this, receiver);
-            yield* commands.yieldNow();
+            yield* commands.yieldNow;
             events.push("call");
             return this.value + value;
           }) : undefined;
@@ -223,7 +223,7 @@ test("optional methods preserve receivers, getter evaluation, and conditional ar
   for (const run of [module.returnedCallback, scheduled(module.returnedCallback)]) {
     const queue = [makeSchedulable(function* (this: unknown, value: number) {
       assert.equal(this, undefined);
-      yield* commands.yieldNow();
+      yield* commands.yieldNow;
       return value;
     })];
     assert.equal(await run(queue, () => 7), 7);
@@ -268,7 +268,7 @@ test("receiver temporaries are isolated across recursive and concurrent executio
     }
   `);
   const add = makeSchedulable(function* (this: { value: number }, amount: number) {
-    yield* commands.yieldNow();
+    yield* commands.yieldNow;
     return this.value + amount;
   });
   const receiver = (value: number) => ({ value, add });
@@ -325,7 +325,7 @@ test("GraphQL.js 16.14.2 transforms and runs through its public API", async (t) 
   // A supplied schedulable visitor must be executed through the same runner.
   let visited = false;
   const visitor = makeSchedulable(function* () {
-    yield* commands.yieldNow();
+    yield* commands.yieldNow;
     visited = true;
   });
   await scheduled(transformed.visit)(original, { Document: visitor });

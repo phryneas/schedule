@@ -5,6 +5,7 @@ import type {
 } from "./types.ts";
 import type { schedulableImplementationSignal } from "./internal.ts";
 import { SingleCommand } from "./singleCommand.ts";
+import { ReusableCommand } from "./reusableCommand.ts";
 import type {
   HasMultipleSignatures,
   MapResults,
@@ -34,15 +35,12 @@ export type Command =
       startImmediately?: boolean;
     };
 
-const yieldCmd = { kind: "yield" } as const;
-export function yieldNow(): SchedulableIterable<void> {
-  return new SingleCommand(yieldCmd);
-}
-
-const getSignalCmd = { kind: "getSignal" } as const;
-export function getSignal(): SchedulableIterable<ScheduleSignal> {
-  return new SingleCommand(getSignalCmd);
-}
+export const yieldNow: SchedulableIterable<void> = new ReusableCommand<void>(
+  { kind: "yield" },
+  { done: true, value: undefined },
+);
+export const getSignal: SchedulableIterable<ScheduleSignal> =
+  new ReusableCommand<ScheduleSignal>({ kind: "getSignal" });
 
 export function execute<Fn extends (...args: any[]) => unknown>(
   fn: HasMultipleSignatures<Fn> extends true

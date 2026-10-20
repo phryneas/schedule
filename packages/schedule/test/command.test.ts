@@ -4,7 +4,7 @@ import { async, makeSchedulable, commands } from "../src/index.ts";
 
 test("command is cached and reusable across receivers and scheduler runs", async () => {
   const add = makeSchedulable(function* (this: { base: number }, value: number) {
-    yield* commands.yieldNow();
+    yield* commands.yieldNow;
     return this.base + value;
   });
   assert.equal(add.command, add.command);

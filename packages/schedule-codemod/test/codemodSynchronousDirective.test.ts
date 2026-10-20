@@ -8,7 +8,7 @@ test("synchronous calls retain surrounding checkpoints and scheduled arguments",
     // @phryneas/schedule synchronous
     return fn(input());
   }`, "fixture.ts");
-  assert.match(result, /yield\* _commands.yieldNow\(\)/);
+  assert.match(result, /yield\* _commands.yieldNow/);
   assert.match(result, /return fn\([^]*?_scheduled = _schedulableImplementationSignal in input, _scheduled \? yield\* _commands.execute\(input\)\(\) : input\(\)/);
   assert.doesNotMatch(result, /execute\(fn\)/);
 });

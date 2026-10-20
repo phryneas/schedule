@@ -89,6 +89,8 @@ function executeIterableAsync<T>(
           schedule(continueLoop);
           yield;
           scheduleSignal.bump();
+          // A defined resumption value completes the reusable yield command.
+          nextArg = null;
           continue;
         }
         case "execute": {

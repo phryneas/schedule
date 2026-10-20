@@ -14,7 +14,7 @@ test("unconditional function-level checkpoints use eager acquisition", () => {
     `// @phryneas/schedule may-yield-here\nreturn 7;`,
   ]) {
     const output = transformSource(`export function work(fn) {\n${body}\n}`, "fixture.js");
-    assert.match(output, /const _signal = yield\* _commands.getSignal\(\)/);
+    assert.match(output, /const _signal = yield\* _commands.getSignal/);
     assert.doesNotMatch(output, /\?\?=/);
   }
 });
@@ -28,7 +28,7 @@ test("early returns and conditional expressions keep acquisition lazy", async ()
   ]) {
     const work = await generator(body);
     assert.deepEqual(work(false, () => 3).next(), { done: true, value: 7 });
-    assert.deepEqual(work(true, () => 3).next().value, { kind: 'getSignal' });
+    assert.deepEqual(work(true, () => 3).next().value, { kind: "getSignal" });
   }
 });
 async function generator(body: string) {
@@ -48,7 +48,7 @@ test("computed keys initialize the signal for the following assignment value", a
   assert.equal((output.match(/\?\?=/g) ?? []).length, 1);
   const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
   const iterator = module.map[schedulableImplementationSignal]([1, 2], String, (n: number) => n * 2);
-  assert.deepEqual(iterator.next().value, { kind: 'getSignal' });
+  assert.deepEqual(iterator.next().value, { kind: "getSignal" });
   assert.deepEqual(iterator.next({ shouldYield: false }), { done: true, value: { 1: 2, 2: 4 } });
 });
 
@@ -67,7 +67,7 @@ test("successive statements in a loop share initialization but conditional ones 
     assert.equal((output.match(/\?\?=/g) ?? []).length, expected);
     const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
     const iterator = module.work[schedulableImplementationSignal](false, () => {});
-    assert.deepEqual(iterator.next().value, { kind: 'getSignal' });
+    assert.deepEqual(iterator.next().value, { kind: "getSignal" });
     assert.deepEqual(iterator.next({ shouldYield: false }), { done: true, value: undefined });
   }
 });
@@ -79,7 +79,7 @@ test("destructuring does not assume its computed key runs before its source", as
   }`);
   const values = [{ key: 7 }, 'key'];
   const iterator = work(true, () => values.shift());
-  assert.deepEqual(iterator.next().value, { kind: 'getSignal' });
+  assert.deepEqual(iterator.next().value, { kind: "getSignal" });
   assert.deepEqual(iterator.next({ shouldYield: false }), { done: true, value: 7 });
 });
 
@@ -90,7 +90,7 @@ test("signal acquisition stays inside the switch branch using it", async () => {
   }`);
   assert.deepEqual(work('skip', () => 3).next(), { done: true, value: 7 });
   const iterator = work('call', () => 3);
-  assert.deepEqual(iterator.next().value, { kind: 'getSignal' });
+  assert.deepEqual(iterator.next().value, { kind: "getSignal" });
   assert.deepEqual(iterator.next({ shouldYield: false }), { done: true, value: 3 });
 });
 
@@ -102,11 +102,11 @@ test("a branch containing a loop acquires its signal only once", async () => {
   } return 7;`);
   assert.deepEqual(work(false).next(), { done: true, value: 7 });
   const iterator = work(true);
-  assert.deepEqual(iterator.next().value, { kind: 'getSignal' });
+  assert.deepEqual(iterator.next().value, { kind: "getSignal" });
   assert.deepEqual(iterator.next({ shouldYield: true }).value, { kind: 'yield' });
-  assert.deepEqual(iterator.next().value, { kind: 'yield' });
-  assert.deepEqual(iterator.next().value, { kind: 'yield' });
-  assert.deepEqual(iterator.next(), { done: true, value: 7 });
+  assert.deepEqual(iterator.next(null).value, { kind: 'yield' });
+  assert.deepEqual(iterator.next(null).value, { kind: 'yield' });
+  assert.deepEqual(iterator.next(null), { done: true, value: 7 });
 });
 
 test("checks in separate branches lazily share a function-level signal", async () => {
@@ -116,7 +116,7 @@ test("checks in separate branches lazily share a function-level signal", async (
   assert.deepEqual(work(0).next(), { done: true, value: 7 });
   for (const kind of [1, 2]) {
     const iterator = work(kind, () => 3);
-    assert.deepEqual(iterator.next().value, { kind: 'getSignal' });
+    assert.deepEqual(iterator.next().value, { kind: "getSignal" });
     assert.deepEqual(iterator.next({ shouldYield: false }), { done: true, value: 7 });
   }
 });
@@ -127,7 +127,7 @@ test("a branch inside a loop does not reacquire the signal per iteration", async
   } return 7;`);
   let calls = 0;
   const iterator = work(true, () => { calls++; });
-  assert.deepEqual(iterator.next().value, { kind: 'getSignal' });
+  assert.deepEqual(iterator.next().value, { kind: "getSignal" });
   assert.deepEqual(iterator.next({ shouldYield: false }), { done: true, value: 7 });
   assert.equal(calls, 3);
 });
@@ -137,7 +137,7 @@ test("signal acquisition does not move into a catchable region", async () => {
     if (kind) { return fn.call(null); }
   } catch { return 'caught'; }`);
   const iterator = work(true, () => 3);
-  assert.deepEqual(iterator.next().value, { kind: 'getSignal' });
+  assert.deepEqual(iterator.next().value, { kind: "getSignal" });
   const error = new Error('cancelled');
   assert.throws(() => iterator.throw(error), value => value === error);
 });
@@ -151,7 +151,7 @@ test("signal acquisition stays outside nested try, catch, and finally blocks", a
     let calls = 0;
     const work = await generator(body);
     const iterator = work(true, () => { calls++; });
-    assert.deepEqual(iterator.next().value, { kind: 'getSignal' });
+    assert.deepEqual(iterator.next().value, { kind: "getSignal" });
     const error = new Error('cancelled');
     assert.throws(() => iterator.throw(error), value => value === error);
     assert.equal(calls, 0);

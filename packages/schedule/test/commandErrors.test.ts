@@ -18,7 +18,7 @@ for (const scheduler of [sync, async]) {
           events.push("catch");
           return 42;
         } finally {
-          yield* commands.yieldNow();
+          yield* commands.yieldNow;
           events.push("finally");
         }
       });

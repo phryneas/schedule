@@ -94,7 +94,7 @@ index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd
      const caughtError = expectToThrow(() => parse('{'));
  
 diff --git a/src/language/__tests__/visitor-test.ts b/src/language/__tests__/visitor-test.ts
-index f6f05199a057ce2a245fef6be90833e2b3f23ca9..b774fd1c69e639abbba3d8de232b1d5192fbb7cb 100644
+index f6f05199a057ce2a245fef6be90833e2b3f23ca9..ad74ac110ec23c74499ec8d1a8761fe6a3fd05d8 100644
 --- a/src/language/__tests__/visitor-test.ts
 +++ b/src/language/__tests__/visitor-test.ts
 @@ -1,5 +1,10 @@
@@ -145,9 +145,9 @@ index f6f05199a057ce2a245fef6be90833e2b3f23ca9..b774fd1c69e639abbba3d8de232b1d51
 +    const visitor: ASTVisitor = {
 +      Name: makeSchedulable(function* (this: ASTVisitor, node: ASTNode) {
 +        expect(this).to.equal(visitor);
-+        const currentSignal = yield* commands.getSignal();
++        const currentSignal = yield* commands.getSignal;
 +        if ('command' in visit) expect(currentSignal).to.equal(signal);
-+        yield* commands.yieldNow();
++        yield* commands.yieldNow;
 +        if (node.kind === Kind.NAME) names.push(node.value);
 +      }),
 +    };

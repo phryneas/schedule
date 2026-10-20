@@ -49,8 +49,8 @@ export function run(fn: (this: { value: number }) => number, receiver: { value: 
   const { run } = await import(pathToFileURL(generated).href);
   const signal = { shouldYield: false, aborted: false, throwIfAborted() {}, bump() {} };
   const callback = makeSchedulable(function* (this: { value: number }) {
-    assert.equal(yield* commands.getSignal(), signal);
-    yield* commands.yieldNow();
+    assert.equal(yield* commands.getSignal, signal);
+    yield* commands.yieldNow;
     return this.value;
   });
   let finished = false;

@@ -26,8 +26,8 @@ test("marked callbacks can contain checkpoints and scheduled calls", () => {
         }
       };
     }`, "fixture.ts");
-  assert.match(result, /yield\* _commands.getSignal\(\)/);
-  assert.match(result, /yield\* _commands.yieldNow\(\)/);
+  assert.match(result, /yield\* _commands.getSignal/);
+  assert.match(result, /yield\* _commands.yieldNow/);
   assert.match(result, /yield\* _commands.execute\(helper\)\(\)/);
 });
 

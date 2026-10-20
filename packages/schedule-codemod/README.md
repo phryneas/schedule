@@ -58,7 +58,7 @@ export function sum(values: number[]): number {
 ```
 
 The codemod obtains the scheduling signal once per function and replaces each
-directive with `if (signal.shouldYield) { yield* commands.yieldNow(); }`.
+directive with `if (signal.shouldYield) { yield* commands.yieldNow; }`.
 The comment must appear between statements inside a braced body; an empty body
 or the end of a body also works. Directives in excluded functions, such as inline
 callbacks, report an error.

@@ -14,7 +14,7 @@ test("execute supports dynamically narrowed ordinary and schedulable methods", a
   const scheduled = {
     total: 20,
     toJSON: makeSchedulable(function* (this: { total: number }, amount: number) {
-      yield* yieldNow();
+      yield* yieldNow;
       return this.total + amount;
     }),
   };
@@ -65,7 +65,7 @@ test("execute forwards this and arguments to a schedulable function", async () =
     value: number,
   ): SchedulableIterable<number> {
     assert.equal(this, receiver);
-    yield* yieldNow();
+    yield* yieldNow;
     assert.equal(this, receiver);
     this.total += value;
     return this.total;

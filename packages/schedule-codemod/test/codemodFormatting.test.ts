@@ -78,7 +78,7 @@ test("printing preserves template whitespace and yield precedence in type assert
   const source = 'export function text(fn: () => string) {\n  const literal = `\n    text\n\n`;\n  return fn() as string;\n}\n';
   const output = transformSource(source, "fixture.ts");
   assert.ok(output.includes('`\n    text\n\n`'));
-  assert.match(output, /\(yield\* .*\) as string/);
+  assert.match(output, /return \(.*yield.*\) as string/);
   assert.ok(parseSync(output, { configFile: false, babelrc: false, parserOpts: { plugins: ["typescript"] } }));
 });
 

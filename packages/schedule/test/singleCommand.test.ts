@@ -32,12 +32,10 @@ test("execute iterators close on return or throw, before or after yielding", () 
   }
 });
 
-test("all command iterators retain native iterator helpers and disposal", () => {
+test("execute and syncAware iterators retain native iterator helpers and disposal", () => {
   const unexpected = () => assert.fail("must not execute");
   const cases = [
     [commands.execute(unexpected), "execute"],
-    [commands.getSignal, "getSignal"],
-    [commands.yieldNow, "yield"],
     [commands.syncAware({ sync: unexpected, async: unexpected }), "syncAware"],
   ] as const;
   for (const [factory, kind] of cases) {

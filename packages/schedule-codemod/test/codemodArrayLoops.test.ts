@@ -48,8 +48,8 @@ export function lexical(this: { factor: number }, items: number[]) {
   assert.match(text, /for \(const item of /);
   assert.doesNotMatch(text, /transform-to-loop|\.map\(|\.some\(/);
   const someBody = text.slice(text.indexOf("export var some"), text.indexOf("export var declarations"));
-  assert.ok(someBody.indexOf("_commands.yieldNow()") >= 0, text);
-  assert.ok(someBody.indexOf("_commands.yieldNow()") < someBody.indexOf("_commands.execute(callback)"), someBody);
+  assert.ok(someBody.indexOf("_commands.yieldNow") >= 0, text);
+  assert.ok(someBody.indexOf("_commands.yieldNow") < someBody.indexOf("_commands.execute(callback)"), someBody);
   const checked = spawnSync(join(root, "node_modules/.bin/tsc"), [
     "--ignoreConfig", "--strict", "--noEmit", "--target", "esnext", "--module", "nodenext",
     "--allowImportingTsExtensions", join(output, "fixture.ts"),
@@ -57,7 +57,7 @@ export function lexical(this: { factor: number }, items: number[]) {
   assert.equal(checked.status, 0, checked.stdout + checked.stderr);
   const module = await import(pathToFileURL(join(output, "fixture.ts")).href);
   const double = makeSchedulable(function* (value: number) {
-    yield* commands.yieldNow();
+    yield* commands.yieldNow;
     return value * 2;
   });
   assert.deepEqual(module.map([1, 2, 3], double), [2, 4, 6]);
@@ -65,7 +65,7 @@ export function lexical(this: { factor: number }, items: number[]) {
   let calls = 0;
   const predicate = makeSchedulable(function* (value: number) {
     calls++;
-    yield* commands.yieldNow();
+    yield* commands.yieldNow;
     return value === 2;
   });
   assert.equal(await scheduled(module.some)([1, 2, 3], predicate), true);

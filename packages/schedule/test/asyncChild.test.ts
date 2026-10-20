@@ -18,12 +18,12 @@ test("a child's first command is processed exactly once with the shared signal",
   let calls = 0;
   const child = makeSchedulable(function* () {
     calls++;
-    const signal = yield* commands.getSignal();
-    yield* commands.yieldNow();
+    const signal = yield* commands.getSignal;
+    yield* commands.yieldNow;
     return signal;
   });
   const parent = makeSchedulable(function* () {
-    const signal = yield* commands.getSignal();
+    const signal = yield* commands.getSignal;
     assert.equal(yield* child.command(), signal);
   });
   await async(parent)();

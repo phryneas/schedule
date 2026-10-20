@@ -17,11 +17,11 @@ import type { SchedulableIterable } from "@phryneas/schedule";
 const sum = makeSchedulable(function* sum(
   values: number[],
 ): SchedulableIterable<number> {
-  const signal = yield* commands.getSignal();
+  const signal = yield* commands.getSignal;
   let total = 0;
   for (const value of values) {
     if (signal.shouldYield) {
-      yield* commands.yieldNow();
+      yield* commands.yieldNow;
     }
     total += value;
   }
@@ -40,27 +40,27 @@ Use `await async(fn, signal?)(...args)` to let other work run between chunks.
 
 Import `commands` and use `yield*` with each command inside your generator.
 
-### `commands.getSignal()`
+### `commands.getSignal`
 
 Get the current run's signal. Capture it once to check when to yield or whether
 the run has been cancelled.
 
 ```ts
-const signal = yield* commands.getSignal();
+const signal = yield* commands.getSignal;
 ```
 
 Read `signal.shouldYield` to decide when to pause. It also checks for
 cancellation. Use `signal.throwIfAborted()` when you only need a cancellation
 check.
 
-### `commands.yieldNow()`
+### `commands.yieldNow`
 
 Pause to let other work run, then continue where you left off. In synchronous
 execution, this command continues immediately.
 
 ```ts
 if (signal.shouldYield) {
-  yield* commands.yieldNow();
+  yield* commands.yieldNow;
 }
 ```
 
@@ -114,7 +114,7 @@ const sumFile = makeSchedulable(function* sumFile(
   directory: string,
   filename: string,
 ): SchedulableIterable<number> {
-  const signal = yield* commands.getSignal();
+  const signal = yield* commands.getSignal;
 
   const filePath = join(directory, filename);
 
@@ -126,7 +126,7 @@ const sumFile = makeSchedulable(function* sumFile(
   let total = 0;
   for (const line of contents.split(/\r?\n/)) {
     if (signal.shouldYield) {
-      yield* commands.yieldNow();
+      yield* commands.yieldNow;
     }
     total += Number(line);
   }

@@ -50,14 +50,14 @@ test("super calls select the superclass method and preserve the current receiver
   let yielded = false;
   let baseSignal: unknown;
   const base = makeSchedulable(function* (this: { value: number }, amount: number) {
-    baseSignal = yield* commands.getSignal();
-    yield* commands.yieldNow();
+    baseSignal = yield* commands.getSignal;
+    yield* commands.yieldNow;
     yielded = true;
     return this.value + amount;
   });
   module.Base.prototype.add = base;
   const run = makeSchedulable(function* () {
-    const signal = yield* commands.getSignal();
+    const signal = yield* commands.getSignal;
     const result = yield* commands.execute(instance.add).bind(instance)(3);
     assert.equal(baseSignal, signal);
     return result;

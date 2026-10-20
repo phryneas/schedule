@@ -38,7 +38,7 @@ test("syncAware reads a file and sums its lines in both modes", async () => {
     filename: string,
   ): SchedulableIterable<number> {
     const filePath = join(directory, filename);
-    const signal = yield* getSignal();
+    const signal = yield* getSignal;
     const contents = yield* syncAware({
       sync: (file: string) => readFileSync(file, "utf8"),
       async: (file: string) => readFile(file, "utf8"),
@@ -47,7 +47,7 @@ test("syncAware reads a file and sums its lines in both modes", async () => {
     let total = 0;
     for (const line of contents.split(/\r?\n/)) {
       if (signal.shouldYield) {
-        yield* yieldNow();
+        yield* yieldNow;
       }
       total += Number(line);
     }
