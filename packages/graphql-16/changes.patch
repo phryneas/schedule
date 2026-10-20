@@ -338,10 +338,21 @@ index fc87612b257488f6578760e5fbe1cb913733f518..dc0ff7ffc908b8378d02b5e5d90423b6
      openKind: TokenKind,
      parseFn: () => T,
 diff --git a/src/language/visitor.ts b/src/language/visitor.ts
-index 0917fc0e9fb8b03f7e4480f1a22e5a80219740c8..20c158968c9d85399ee674ba043f3a251f980cde 100644
+index 0917fc0e9fb8b03f7e4480f1a22e5a80219740c8..0560a924f92fe6012aa02722e8fe207e295f1083 100644
 --- a/src/language/visitor.ts
 +++ b/src/language/visitor.ts
-@@ -283,6 +283,7 @@ export function visit(
+@@ -274,15 +274,16 @@ export function visit(
+   let inArray = Array.isArray(root);
+   let keys: any = [root];
+   let index = -1;
+-  let edits = [];
++  let edits: Array<[any, any]> = [];
+   let node: any = root;
+   let key: any = undefined;
+   let parent: any = undefined;
+-  const path: any = [];
++  const path: Array<string | number> = [];
+   const ancestors = [];
    /* eslint-enable no-undef-init */
  
    do {
