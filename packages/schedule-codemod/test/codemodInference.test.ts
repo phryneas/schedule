@@ -15,7 +15,7 @@ test("dynamic dispatch keeps callable signatures in both branches", () => {
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
-test("native Boolean stays direct without excluding a shadowed callback", async t => {
+test("native constructors stay direct without excluding shadowed callbacks", async t => {
   const root = resolve("../..");
   await mkdir(join(root, ".tmp"), { recursive: true });
   const directory = await mkdtemp(join(root, ".tmp/native-boolean-"));
@@ -35,10 +35,18 @@ export function devAssert(condition: unknown, message: string): void {
 export function caller(value: unknown): void { devAssert(value, "required"); }
 export function qualified(value: unknown): boolean { return globalThis.Boolean(value); }
 export function indirect(value: unknown): boolean { return Boolean.call(undefined, value); }
+export function constructors(value: string) {
+  return [String(value), Number(value), BigInt(value), Symbol(value), Object(value),
+    Array(value), Date(), RegExp(value), Error(value), TypeError(value), Function(value),
+    globalThis.String(value), String.call(undefined, value), Number.apply(undefined, [value])];
+}
 `);
   await writeFile(join(source, "callback.ts"), `
 export function run(Boolean: (value: unknown) => boolean, value: unknown): boolean {
   return Boolean(value);
+}
+export function shadowed(String: (value: unknown) => string, value: unknown): string {
+  return String(value);
 }
 `);
   await transformProject({
@@ -50,6 +58,7 @@ export function run(Boolean: (value: unknown) => boolean, value: unknown): boole
   assert.match(native, /Boolean\(condition\)/);
   const callback = await readFile(join(output, "callback.ts"), "utf8");
   assert.match(callback, /yield\* _commands.execute\(Boolean\)/);
+  assert.match(callback, /yield\* _commands.execute\(String\)/);
   const { run } = await import(pathToFileURL(join(output, "callback.ts")).href);
   const fn = makeSchedulable(function* (value: unknown) {
     yield* commands.yieldNow;

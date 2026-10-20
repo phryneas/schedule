@@ -90,11 +90,14 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
         // A union's resolved signature can represent only one of its members.
         direct = !!signature && !!checker.getTypePredicateOfSignature(signature);
       }
-      // Boolean's callable interface is not a callback when the value itself
-      // resolves to the standard-library global. Locally shadowed values stay dynamic.
+      const calleeType = checker.getTypeAtLocation(callee);
+      // Native constructors' callable interfaces are not callbacks. BigInt and
+      // Symbol are callable factories without construct signatures.
+      // Locally shadowed values still remain dynamic.
       direct ||= !!boundDeclaration && isVariableDeclaration(boundDeclaration)
-        && boundDeclaration.name.getText() === "Boolean"
-        && project.program.isSourceFileDefaultLibrary(boundDeclaration.getSourceFile());
+        && project.program.isSourceFileDefaultLibrary(boundDeclaration.getSourceFile())
+        && (!!calleeType && checker.getSignaturesOfType(calleeType, SignatureKind.Construct).length > 0
+          || ["BigInt", "Symbol"].includes(boundDeclaration.name.getText()));
       direct ||= declarations.length > 0 && declarations.every(node => !!node && excluded(node));
       // A concrete implementation tells us whether this target is transformed.
       // Function-typed parameters and properties remain dynamic targets.
@@ -107,7 +110,6 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
         return node && (isFunctionDeclaration(node) || isMethodDeclaration(node) || isFunctionExpression(node) || isArrowFunction(node))
           ? { file: node.getSourceFile().fileName, end: node.end } : undefined;
       });
-      const calleeType = checker.getTypeAtLocation(callee);
       const commandProperty = calleeType && checker.getPropertyOfType(calleeType, "command");
       const hasCommand = !!commandProperty && !(commandProperty.flags & SymbolFlags.Optional);
       result.calls.set(node.end, { direct, hasCommand, ...(targets.length && targets.every(target => !!target) ? { targets } : {}) });

@@ -3,6 +3,7 @@
   "typeImportResolutionMode": "import",
   "excludeFiles": ["**/__tests__/**", "**/__testUtils__/**"],
   "exclude": [
+    { "file": "type/schema.ts", "name": "collectReferencedTypes" },
     { "file": "validation/rules/OverlappingFieldsCanBeMergedRule.ts", "name": "doTypesConflict" },
     { "file": "jsutils/inspect.ts", "name": "*" },
     { "file": "execution/cancellablePromise.ts", "name": "abort" },
