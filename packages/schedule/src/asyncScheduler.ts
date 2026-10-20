@@ -21,11 +21,10 @@ export function async<
   };
 }
 
-function executeIterableAsync<T>(
-  iterable: SchedulableIterable<T>,
+async function executeIterableAsync(
+  iterable: SchedulableIterable<unknown>,
   abortSignal?: AbortSignal | ScheduleSignal,
-  initialResult?: IteratorResult<Command, T>,
-): Promise<T> {
+): Promise<unknown> {
   let scheduleSignal: ScheduleSignal;
   if (abortSignal && "shouldYield" in abortSignal) {
     scheduleSignal = abortSignal;
@@ -48,46 +47,57 @@ function executeIterableAsync<T>(
     };
   }
 
-  let continueLoop = () => {
-    /* */
-  };
-  return new Promise<T>((resolve, reject) => {
-    const mainLoop = iterate();
-    continueLoop = () => {
-      mainLoop
-        .next()
-        .then((result) => {
-          if (result.done) {
-            resolve(result.value);
-          }
-        })
-        .catch(reject);
-    };
-    continueLoop();
-  });
-
-  async function* iterate(): AsyncGenerator<void, T> {
-    const iterator = initialResult ? iterable : iterable[Symbol.iterator]();
-    let nextArg: unknown;
-    let throwing = false;
-    do {
-      const result: IteratorResult<Command, T> = initialResult ?? (throwing ? iterator.throw(nextArg) : iterator.next(nextArg));
+  const parents: SchedulableIterable<unknown>[] = [];
+  let iterator = iterable[Symbol.iterator]();
+  let initialResult: IteratorResult<Command, unknown> | undefined;
+  let nextArg: unknown;
+  let throwing = false;
+  do {
+    let result: IteratorResult<Command, unknown>;
+    try {
+      result =
+        initialResult ??
+        (throwing ? iterator.throw(nextArg) : iterator.next(nextArg));
+    } catch (error) {
+      const parent = parents.pop();
+      if (!parent) throw error;
+      iterator = parent;
       initialResult = undefined;
-      throwing = false;
-      nextArg = undefined;
-      if (result.done) {
-        return result.value as Awaited<T>;
-      }
+      nextArg = error;
+      throwing = true;
+      continue;
+    }
+    initialResult = undefined;
+    throwing = false;
+    nextArg = undefined;
+    if (result.done) {
+      const parent = parents.pop();
+      if (!parent) return result.value;
+      iterator = parent;
       try {
-        switch (result.value.kind) {
+        const value = result.value;
+        nextArg =
+          value !== null &&
+          (typeof value === "object" || typeof value === "function") &&
+          "then" in value &&
+          typeof value.then === "function"
+            ? await value
+            : value;
+      } catch (error) {
+        nextArg = error;
+        throwing = true;
+      }
+      continue;
+    }
+    try {
+      switch (result.value.kind) {
         case "getSignal": {
           scheduleSignal.throwIfAborted();
           nextArg = scheduleSignal;
           continue;
         }
         case "yield": {
-          schedule(continueLoop);
-          yield;
+          await new Promise<void>(schedule);
           scheduleSignal.bump();
           // A defined resumption value completes the reusable yield command.
           nextArg = null;
@@ -96,23 +106,27 @@ function executeIterableAsync<T>(
         case "execute": {
           const { fn, args, this: thisArg, startImmediately } = result.value;
           if (!startImmediately && scheduleSignal.shouldYield) {
-            schedule(continueLoop);
-            yield;
+            await new Promise<void>(schedule);
             scheduleSignal.bump();
           }
           if (isSchedulableFunction(fn)) {
             const child = fn[schedulableImplementationSignal]
-              .apply(thisArg, args)[Symbol.iterator]();
+              .apply(thisArg, args)
+              [Symbol.iterator]();
             const first = child.next();
             if (first.done) {
               const value = first.value;
-              // Let await assimilate possible thenables without reading `then`
-              // ourselves: getters must be read only once.
-              nextArg = value !== null && (typeof value === "object" || typeof value === "function")
-                ? await value
-                : value;
+              nextArg =
+                value !== null &&
+                (typeof value === "object" || typeof value === "function") &&
+                "then" in value &&
+                typeof value.then === "function"
+                  ? await value
+                  : value;
             } else {
-              nextArg = await executeIterableAsync(child, scheduleSignal, first);
+              parents.push(iterator);
+              iterator = child;
+              initialResult = first;
             }
           } else {
             nextArg = fn.apply(thisArg, args);
@@ -122,20 +136,18 @@ function executeIterableAsync<T>(
         case "syncAware": {
           const { async, args, this: thisArg, startImmediately } = result.value;
           if (!startImmediately && scheduleSignal.shouldYield) {
-            schedule(continueLoop);
-            yield;
+            await new Promise<void>(schedule);
             scheduleSignal.bump();
           }
           nextArg = await async.apply(thisArg, args);
           continue;
         }
-        }
-      } catch (error) {
-        nextArg = error;
-        throwing = true;
       }
-    } while (true);
-  }
+    } catch (error) {
+      nextArg = error;
+      throwing = true;
+    }
+  } while (true);
 }
 
 function schedule(fn: () => void) {
