@@ -643,7 +643,7 @@ index 958f9c7773114add14f7f3738db7472d49f077dc..e5d073e7e85c714f2129ed26062fbffd
  
  function parseImpl(
 diff --git a/src/language/visitor.ts b/src/language/visitor.ts
-index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..007b6fc4cf00a19f9f23a118c4b99a01012eac36 100644
+index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..c5c023bbe748a00d190554a99b29bb57e150d6b2 100644
 --- a/src/language/visitor.ts
 +++ b/src/language/visitor.ts
 @@ -273,15 +273,16 @@ export function visit(
@@ -692,57 +692,28 @@ index cf82fe4ccd7e7824361feb748e7b9a1b8c8028be..007b6fc4cf00a19f9f23a118c4b99a01
  
        if (result === BREAK) {
          break;
-@@ -426,12 +431,22 @@ export function visitInParallel(
-     let hasVisitor = false;
-     const enterList = new Array(visitors.length).fill(undefined);
-     const leaveList = new Array(visitors.length).fill(undefined);
-+    const enterIndexes: Array<number> = [];
-+    const leaveIndexes: Array<number> = [];
- 
-     for (let i = 0; i < visitors.length; ++i) {
-       const { enter, leave } = getEnterLeaveForKind(visitors[i], kind);
-       hasVisitor ||= enter != null || leave != null;
-       enterList[i] = enter;
-       leaveList[i] = leave;
-+      if (enter != null) {
-+        enterIndexes.push(i);
-+      }
-+      // An enter callback can skip this node's children. Its leave pass must
-+      // clear that state even when the visitor has no leave callback.
-+      if (enter != null || leave != null) {
-+        leaveIndexes.push(i);
-+      }
-     }
- 
-     if (!hasVisitor) {
-@@ -439,9 +454,12 @@ export function visitInParallel(
+@@ -439,8 +444,10 @@ export function visitInParallel(
      }
  
      const mergedEnterLeave: EnterLeaveVisitor<ASTNode> = {
 +      // @phryneas/schedule schedulable
        enter(...args) {
          const node = args[0];
--        for (let i = 0; i < visitors.length; i++) {
 +        // @phryneas/schedule may-yield-here
-+        for (let index = 0; index < enterIndexes.length; index++) {
-+          const i = enterIndexes[index];
+         for (let i = 0; i < visitors.length; i++) {
            if (skipping[i] === null) {
              const result = enterList[i]?.apply(visitors[i], args);
-             if (result === false) {
-@@ -454,9 +472,12 @@ export function visitInParallel(
+@@ -454,8 +461,10 @@ export function visitInParallel(
            }
          }
        },
 +      // @phryneas/schedule schedulable
        leave(...args) {
          const node = args[0];
--        for (let i = 0; i < visitors.length; i++) {
 +        // @phryneas/schedule may-yield-here
-+        for (let index = 0; index < leaveIndexes.length; index++) {
-+          const i = leaveIndexes[index];
+         for (let i = 0; i < visitors.length; i++) {
            if (skipping[i] === null) {
              const result = leaveList[i]?.apply(visitors[i], args);
-             if (result === BREAK) {
 diff --git a/src/type/__tests__/validation-test.ts b/src/type/__tests__/validation-test.ts
 index a5bd4012feb652cf96fd63268f0418492e17fb15..d92a8c162f59c4ed53d664b1cc7cef379b88fdb0 100644
 --- a/src/type/__tests__/validation-test.ts
