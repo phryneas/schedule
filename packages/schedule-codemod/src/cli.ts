@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import { parseArgs } from "node:util";
 import { transformProject } from "./project.ts";
 import type { ProjectOptions } from "./project.ts";
 
-const [config, ...extra] = process.argv.slice(2);
+const { positionals: [config, ...extra] } = parseArgs({ allowPositionals: true });
 if (!config || extra.length) {
   throw new Error("Usage: schedule-codemod <config.json>");
 }

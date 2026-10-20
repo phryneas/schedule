@@ -2,10 +2,11 @@ import { execFileSync } from "node:child_process";
 import { cp, readFile, rm } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 import { transformProject } from "../packages/schedule-codemod/src/project.ts";
 import { patched, transformed } from "./common.mjs";
 
-if (process.argv.length !== 2) throw new Error("Usage: node graphql-js/transform.mjs");
+parseArgs();
 const options = JSON.parse(await readFile(new URL("./codemod.json", import.meta.url), "utf8"));
 // Validate the input before removing previous output.
 await readFile(resolve(patched, "tsconfig.json"), "utf8");

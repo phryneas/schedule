@@ -1,0 +1,191 @@
+diff --git a/src/language/__tests__/parser-test.ts b/src/language/__tests__/parser-test.ts
+index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..ef35338d3646d5a8a71e0d75ee36eaedb94a67a7 100644
+--- a/src/language/__tests__/parser-test.ts
++++ b/src/language/__tests__/parser-test.ts
+@@ -1,5 +1,11 @@
+ import { describe, it } from 'node:test';
+ 
++import {
++  async as scheduled,
++  commands,
++  makeSchedulable,
++  schedulableImplementationSignal,
++} from '@phryneas/schedule';
+ import { expect } from 'chai';
+ 
+ import { dedent } from '../../__testUtils__/dedent.ts';
+@@ -24,6 +30,7 @@ import {
+   parseSchemaCoordinate,
+   parseType,
+   parseValue,
++  Parser,
+ } from '../parser.ts';
+ import { Source } from '../source.ts';
+ import { TokenKind } from '../tokenKind.ts';
+@@ -33,6 +40,56 @@ function expectSyntaxError(text: string, options?: ParseOptions) {
+ }
+ 
+ describe('Parser', () => {
++  it(
++    'yields between definitions while parsing each definition synchronously',
++    {
++      skip: !(schedulableImplementationSignal in parse),
++    },
++    async (t) => {
++      const source =
++        'type Query { a: String b: String } scalar First scalar Second';
++      const expected = parse(source);
++      const events: Array<string> = [];
++      const original = Parser.prototype.parseDefinition;
++      t.mock.method(
++        Parser.prototype,
++        'parseDefinition',
++        function (this: Parser) {
++          events.push('definition');
++          return original.call(this);
++        },
++      );
++      let expired = true;
++      const signal = {
++        aborted: false,
++        throwIfAborted() {},
++        get shouldYield() {
++          events.push('check');
++          return expired;
++        },
++        bump() {
++          events.push('yield');
++          expired = false;
++        },
++      };
++      const run = makeSchedulable(function* () {
++        return yield* commands.execute(parse, true)(source);
++      });
++      const result = await scheduled(run, signal)();
++      expect(result).to.deep.equal(expected);
++      expect(result.tokenCount).to.equal(expected.tokenCount);
++      expect(events).to.deep.equal([
++        'check',
++        'yield',
++        'definition',
++        'check',
++        'definition',
++        'check',
++        'definition',
++      ]);
++    },
++  );
++
+   it('parse provides useful errors', () => {
+     const caughtError = expectToThrow(() => parse('{'));
+ 
+diff --git a/src/language/__tests__/visitor-test.ts b/src/language/__tests__/visitor-test.ts
+index f6f05199a057ce2a245fef6be90833e2b3f23ca9..b774fd1c69e639abbba3d8de232b1d5192fbb7cb 100644
+--- a/src/language/__tests__/visitor-test.ts
++++ b/src/language/__tests__/visitor-test.ts
+@@ -1,5 +1,10 @@
+ import { describe, it } from 'node:test';
+ 
++import {
++  async as scheduled,
++  commands,
++  makeSchedulable,
++} from '@phryneas/schedule';
+ import { expect } from 'chai';
+ 
+ import { kitchenSinkQuery } from '../../__testUtils__/kitchenSinkQuery.ts';
+@@ -57,6 +62,54 @@ function getValue(node: ASTNode) {
+ }
+ 
+ describe('Visitor', () => {
++  it('preserves ordinary callbacks with an unrelated command property', () => {
++    const ast = parse('{ a }');
++    const names: Array<string> = [];
++    const visitor: ASTVisitor = {
++      Name: Object.assign(
++        function (this: ASTVisitor, node: ASTNode) {
++          expect(this).to.equal(visitor);
++          if (node.kind === Kind.NAME) names.push(node.value);
++        },
++        {
++          command() {
++            throw new Error('Not a scheduler command');
++          },
++        },
++      ),
++    };
++    visit(ast, visitor);
++    visit(ast, visitInParallel([visitor]));
++    expect(names).to.deep.equal(['a', 'a']);
++  });
++
++  it('retains the scheduler signal and receiver through visitor dispatch', async () => {
++    const ast = parse('{ a }');
++    const signal = {
++      shouldYield: false,
++      aborted: false,
++      throwIfAborted() {},
++      bump() {},
++    };
++    const names: Array<string> = [];
++    const visitor: ASTVisitor = {
++      Name: makeSchedulable(function* (this: ASTVisitor, node: ASTNode) {
++        expect(this).to.equal(visitor);
++        const currentSignal = yield* commands.getSignal();
++        if ('command' in visit) expect(currentSignal).to.equal(signal);
++        yield* commands.yieldNow();
++        if (node.kind === Kind.NAME) names.push(node.value);
++      }),
++    };
++    for (const callbacks of [visitor, visitInParallel([visitor])]) {
++      const run = makeSchedulable(function* () {
++        return yield* commands.execute(visit)(ast, callbacks);
++      });
++      await scheduled(run, signal)();
++    }
++    expect(names).to.deep.equal(['a', 'a']);
++  });
++
+   it('handles empty visitor', () => {
+     const ast = parse('{ a }', { noLocation: true });
+     expect(() => visit(ast, {})).to.not.throw();
+@@ -938,6 +991,39 @@ describe('Visitor', () => {
+   });
+ 
+   describe('visitInParallel', () => {
++    it('resets skipping for an enter-only visitor among sparse visitors', () => {
++      const events: Array<string> = [];
++      visit(
++        parse('{ a { x } b }'),
++        visitInParallel([
++          {},
++          {
++            Field(node) {
++              events.push(`enter:${node.name.value}`);
++              if (node.name.value === 'a') {
++                return false;
++              }
++            },
++          },
++          {},
++          {
++            Field: {
++              leave(node) {
++                events.push(`leave:${node.name.value}`);
++              },
++            },
++          },
++        ]),
++      );
++      expect(events).to.deep.equal([
++        'enter:a',
++        'leave:x',
++        'leave:a',
++        'enter:b',
++        'leave:b',
++      ]);
++    });
++
+     // Note: nearly identical to the above test of the same test but
+     // using visitInParallel.
+     it('allows skipping a sub-tree', () => {

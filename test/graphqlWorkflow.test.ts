@@ -15,6 +15,7 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
     filter: path => !["orig", "patched", "transformed"].some(name => path === join(repository, "graphql-js", name)),
   });
   await writeFile(join(workflow, "changes.patch"), "");
+  await writeFile(join(workflow, "tests.patch"), "");
   await symlink(join(repository, "packages"), join(directory, "packages"), "dir");
   const orig = join(workflow, "orig");
   await mkdir(join(orig, "src/__tests__"), { recursive: true });
@@ -23,12 +24,33 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
     compilerOptions: { target: "esnext", module: "nodenext", types: [], strict: true },
     include: ["src/**/*.ts"],
   }));
-  await writeFile(join(orig, "package.json"), '{"name":"fixture","type":"module"}\n');
+  await writeFile(join(orig, "package.json"), JSON.stringify({
+    name: "fixture", version: "1.2.3", type: "module",
+    engines: { node: "^22.0.0 || ^24.0.0 || >=26.0.0" },
+    scripts: {
+      check: "npm run check:ts && npm run check:deno && npm run extra",
+      "testonly:cover": "node --test --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100",
+      "check:spelling": 'cspell --cache "**/*"',
+    },
+  }));
+  const schedule = join(directory, "schedule-fixture");
+  await mkdir(schedule);
+  await writeFile(join(schedule, "package.json"), '{"name":"@phryneas/schedule","version":"0.0.1"}\n');
+  for (const name of ["dev-jest", "ts"]) {
+    await mkdir(join(orig, "integrationTests", name), { recursive: true });
+  }
+  await writeFile(join(orig, "integrationTests/dev-jest/package.json"), '{"private":true,"devDependencies":{"jest":"^29.7.0"}}\n');
+  await writeFile(join(orig, "integrationTests/ts/package.json"), JSON.stringify({
+    private: true, dependencies: { "typescript-4.9": "npm:typescript@4.9.x", "typescript-6.0": "npm:typescript@6.0.x" },
+  }));
   const original = "function helper(): number { return 1; }\nexport function work(): number {\n// @phryneas/schedule may-yield-here\nreturn helper();\n}\n";
   await writeFile(join(orig, "src/index.ts"), original);
   await writeFile(join(orig, "src/deleted.ts"), "export const deleted = true;\n");
   const testSource = "function helper() { return 1; }\nexport function test() { return helper(); }\n";
   await writeFile(join(orig, "src/__tests__/example.ts"), testSource);
+  const optionalTest = "src/language/__tests__/parser-test.ts";
+  await mkdir(join(orig, "src/language/__tests__"), { recursive: true });
+  await writeFile(join(orig, optionalTest), testSource);
   function git(args: string[], cwd = orig) {
     return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   }
@@ -38,16 +60,45 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   function run(name: string, ...args: string[]) {
     return spawnSync(process.execPath, [join(workflow, name + ".mjs"), ...args], {
       cwd: directory, encoding: "utf8",
+      env: { ...process.env, SCHEDULE_PACKAGE: `file:${schedule}` },
     });
   }
   function succeeds(name: string, ...args: string[]) {
     const result = run(name, ...args);
     assert.equal(result.status, 0, result.stdout + result.stderr);
   }
-  succeeds("patch");
+  for (const name of ["clone", "patch", "update-patches", "transform"]) {
+    const invalid = run(name, "--unknown-option");
+    assert.notEqual(invalid.status, 0);
+    assert.match(invalid.stderr, /ERR_PARSE_ARGS_UNKNOWN_OPTION/);
+  }
+  for (const name of ["patch", "update-patches", "transform"]) {
+    const invalid = run(name, "unexpected");
+    assert.notEqual(invalid.status, 0);
+    assert.match(invalid.stderr, /ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL/);
+  }
+  succeeds("patch", "--with-additional-tests");
   const patched = join(workflow, "patched");
+  const configured = JSON.parse(await readFile(join(patched, "package.json"), "utf8"));
+  assert.equal(configured.name, "@phryneas/scheduled-graphql");
+  assert.equal(configured.version, "1.2.3");
+  assert.equal(configured.engines.node, "^24.0.0 || >=26.0.0");
+  assert.equal(configured.scripts.check, "npm run check:ts && npm run extra");
+  assert.match(configured.scripts["testonly:cover"], /--test-coverage-lines=97 --test-coverage-branches=97 --test-coverage-functions=100/);
+  assert.equal(configured.scripts["check:spelling"], 'cspell --gitignore-root . --cache "**/*"');
+  assert.equal(configured.dependencies["@phryneas/schedule"], `file:${schedule}`);
+  const lock = JSON.parse(await readFile(join(patched, "package-lock.json"), "utf8"));
+  assert.equal(lock.packages[""].name, configured.name);
+  const tsDependencies = JSON.parse(await readFile(join(patched, "integrationTests/ts/package.json"), "utf8")).dependencies;
+  assert.equal(tsDependencies["typescript-4.9"], undefined);
+  assert.equal(tsDependencies["typescript-6.0"], "npm:typescript@6.0.x");
+  const jestDependencies = JSON.parse(await readFile(join(patched, "integrationTests/dev-jest/package.json"), "utf8")).devDependencies;
+  assert.equal(jestDependencies.jest, "^29.7.0");
+  assert.equal(jestDependencies["@babel/plugin-transform-modules-commonjs"], "^7.27.1");
   const edited = original.replace("return 1", "return 2");
   await writeFile(join(patched, "src/index.ts"), edited);
+  const editedTest = testSource.replace("return 1", "return 3");
+  await writeFile(join(patched, optionalTest), editedTest);
   await writeFile(join(patched, "src/added.ts"), "export const added = true;\n");
   const binary = Buffer.from([0, 1, 2, 255]);
   await writeFile(join(patched, "fixture.bin"), binary);
@@ -60,9 +111,26 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   const patch = await readFile(join(workflow, "changes.patch"), "utf8");
   assert.match(patch, /GIT binary patch/);
   assert.doesNotMatch(patch, /node_modules/);
+  assert.doesNotMatch(patch, /parser-test/);
+  assert.doesNotMatch(patch, /package(?:-lock)?\.json/);
+  const testPatch = await readFile(join(workflow, "tests.patch"), "utf8");
+  assert.match(testPatch, /parser-test/);
+  assert.doesNotMatch(testPatch, /src\/index.ts/);
   succeeds("update-patches");
   assert.equal(await readFile(join(workflow, "changes.patch"), "utf8"), patch);
   succeeds("patch", "--force");
+  assert.equal(await readFile(join(patched, optionalTest), "utf8"), testSource);
+  succeeds("update-patches");
+  assert.equal(await readFile(join(workflow, "tests.patch"), "utf8"), testPatch);
+  assert.equal(await readFile(join(workflow, "changes.patch"), "utf8"), patch);
+  await writeFile(join(patched, optionalTest), editedTest);
+  assert.notEqual(run("update-patches").status, 0);
+  assert.equal(await readFile(join(workflow, "tests.patch"), "utf8"), testPatch);
+  succeeds("patch", "--force", "--with-additional-tests");
+  assert.equal(await readFile(join(patched, optionalTest), "utf8"), editedTest);
+  succeeds("update-patches");
+  assert.equal(await readFile(join(workflow, "tests.patch"), "utf8"), testPatch);
+  assert.equal(await readFile(join(workflow, "changes.patch"), "utf8"), patch);
   assert.equal(await readFile(join(patched, "src/index.ts"), "utf8"), edited);
   assert.deepEqual(await readFile(join(patched, "fixture.bin")), binary);
   await assert.rejects(readFile(join(patched, "src/deleted.ts")), { code: "ENOENT" });
