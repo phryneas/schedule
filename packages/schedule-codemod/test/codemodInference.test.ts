@@ -15,6 +15,50 @@ test("dynamic dispatch keeps callable signatures in both branches", () => {
   assert.equal(result.status, 0, result.stdout + result.stderr);
 });
 
+test("native Boolean stays direct without excluding a shadowed callback", async t => {
+  const root = resolve("../..");
+  await mkdir(join(root, ".tmp"), { recursive: true });
+  const directory = await mkdtemp(join(root, ".tmp/native-boolean-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const source = join(directory, "source");
+  const output = join(directory, "output");
+  await mkdir(source);
+  const config = join(directory, "tsconfig.json");
+  await writeFile(config, JSON.stringify({ compilerOptions: {
+    strict: true, target: "esnext", module: "nodenext", allowImportingTsExtensions: true, noEmit: true,
+  }, include: ["source/*.ts"] }));
+  await writeFile(join(source, "native.ts"), `
+export function devAssert(condition: unknown, message: string): void {
+  const booleanCondition = Boolean(condition);
+  if (!booleanCondition) throw new Error(message);
+}
+export function caller(value: unknown): void { devAssert(value, "required"); }
+export function qualified(value: unknown): boolean { return globalThis.Boolean(value); }
+export function indirect(value: unknown): boolean { return Boolean.call(undefined, value); }
+`);
+  await writeFile(join(source, "callback.ts"), `
+export function run(Boolean: (value: unknown) => boolean, value: unknown): boolean {
+  return Boolean(value);
+}
+`);
+  await transformProject({
+    tsconfig: config, sourceDirectory: source, outputDirectory: output,
+    runtimeModule: join(root, "packages/schedule/src/index.ts"),
+  });
+  const native = await readFile(join(output, "native.ts"), "utf8");
+  assert.doesNotMatch(native, /makeSchedulable|yield|commands/);
+  assert.match(native, /Boolean\(condition\)/);
+  const callback = await readFile(join(output, "callback.ts"), "utf8");
+  assert.match(callback, /yield\* _commands.execute\(Boolean\)/);
+  const { run } = await import(pathToFileURL(join(output, "callback.ts")).href);
+  const fn = makeSchedulable(function* (value: unknown) {
+    yield* commands.yieldNow;
+    return Boolean(value);
+  });
+  assert.equal(run(fn, 1), true);
+  assert.equal(await scheduled(run)(fn, 0), false);
+});
+
 test("a guarded callback stays schedulable while the synchronous branch stays direct", async t => {
   const root = resolve("../..");
   await mkdir(join(root, ".tmp"), { recursive: true });

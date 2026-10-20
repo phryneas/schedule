@@ -90,6 +90,11 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
         // A union's resolved signature can represent only one of its members.
         direct = !!signature && !!checker.getTypePredicateOfSignature(signature);
       }
+      // Boolean's callable interface is not a callback when the value itself
+      // resolves to the standard-library global. Locally shadowed values stay dynamic.
+      direct ||= !!boundDeclaration && isVariableDeclaration(boundDeclaration)
+        && boundDeclaration.name.getText() === "Boolean"
+        && project.program.isSourceFileDefaultLibrary(boundDeclaration.getSourceFile());
       direct ||= declarations.length > 0 && declarations.every(node => !!node && excluded(node));
       // A concrete implementation tells us whether this target is transformed.
       // Function-typed parameters and properties remain dynamic targets.
