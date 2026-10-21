@@ -14,10 +14,14 @@ export function async<
   signal?: AbortSignal | ScheduleSignal,
 ): NonNullable<Fn[typeof schedulableImplementationSymbol]["asyncSignature"]> {
   return function (this: any) {
-    return executeIterableAsync(
-      fn[schedulableImplementationSymbol].apply(this, arguments as any),
-      signal,
-    );
+    try {
+      return executeIterableAsync(
+        fn[schedulableImplementationSymbol].apply(this, arguments as any),
+        signal,
+      );
+    } catch (error) {
+      return Promise.reject(error);
+    }
   };
 }
 

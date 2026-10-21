@@ -10,6 +10,27 @@ import {
 } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
+test("async rejects errors thrown while creating the iterable", async () => {
+  const error = new Error("parameter initialization failed");
+  function fail(): never {
+    throw error;
+  }
+  const defaultParameter = makeSchedulable(function* (
+    value: number = fail(),
+  ): SchedulableIterable<number> {
+    return value;
+  });
+  const factory = makeSchedulable(function (): SchedulableIterable<number> {
+    throw undefined;
+  });
+
+  // Invoke before assert.rejects so a synchronous throw fails the test.
+  const parameterResult = async(defaultParameter)();
+  await assert.rejects(parameterResult, reason => reason === error);
+  const factoryResult = async(factory)();
+  await assert.rejects(factoryResult, reason => reason === undefined);
+});
+
 test("nested scheduler calls do not change the outer signal", async () => {
   const child = makeSchedulable(function* (): SchedulableIterable<number> {
     return 42;
