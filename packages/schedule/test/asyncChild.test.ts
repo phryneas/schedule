@@ -30,7 +30,7 @@ test("a child's first command is processed exactly once with the shared signal",
   assert.equal(calls, 1);
 });
 
-test("immediate children assimilate promises and read then getters once", async () => {
+test("immediate children preserve promises without reading then getters", async () => {
   let reads = 0;
   const object = {
     get then() {
@@ -42,19 +42,20 @@ test("immediate children assimilate promises and read then getters once", async 
     return value;
   });
   const parent = makeSchedulable(function* () {
-    assert.equal(yield* child.command(Promise.resolve(42)), 42);
+    const promise = Promise.resolve(42);
+    assert.equal(yield* child.command(promise), promise);
     assert.equal(yield* child.command(object), object);
-    assert.equal(reads, 1);
+    assert.equal(reads, 0);
   });
   await async(parent)();
 });
 
-test("immediate child throws and promise rejections reach parent catch and finally", async () => {
+test("child throws reach parent catch and finally", async () => {
   const error = new Error("child failure");
-  for (const reject of [false, true]) {
+  for (const immediate of [true, false]) {
     let finalized = false;
     const child = makeSchedulable(function* () {
-      if (reject) return Promise.reject(error);
+      if (!immediate) yield* commands.getSignal;
       throw error;
     });
     const parent = makeSchedulable(function* () {
@@ -132,25 +133,7 @@ test("nested errors unwind through yielding finally blocks", async () => {
   assert.deepEqual(events, [0, 1, 2, 3, 4]);
 });
 
-test("a rejection returned after a child command reaches its parent", async () => {
-  const error = new Error("returned rejection");
-  const child = makeSchedulable(function* () {
-    yield* commands.getSignal;
-    return Promise.reject(error);
-  });
-  const parent = makeSchedulable(function* () {
-    try {
-      yield* child.command();
-      assert.fail("expected rejection");
-    } catch (caught) {
-      assert.equal(caught, error);
-      return 42;
-    }
-  });
-  assert.equal(await async(parent)(), 42);
-});
-
-test("non-immediate children read a returned object's then getter once", async () => {
+test("non-immediate children do not read a returned object's then getter", async () => {
   let reads = 0;
   const value = {
     get then() {
@@ -164,7 +147,7 @@ test("non-immediate children read a returned object's then getter once", async (
   });
   const parent = makeSchedulable(function* () {
     assert.equal(yield* child.command(), value);
-    assert.equal(reads, 1);
+    assert.equal(reads, 0);
   });
   await async(parent)();
 });
@@ -178,7 +161,7 @@ test("deep scheduled child calls do not exhaust the JavaScript call stack", asyn
 });
 
 for (const immediate of [true, false]) {
-  test(`${immediate ? "immediate" : "non-immediate"} children only await thenables`, async () => {
+  test(`${immediate ? "immediate" : "non-immediate"} children preserve all return values`, async () => {
     const child = makeSchedulable(function* (value: unknown): SchedulableIterable<unknown> {
       if (!immediate) yield* commands.getSignal;
       return value;
@@ -214,16 +197,74 @@ for (const immediate of [true, false]) {
     const throwing = {
       get then(): never { throw error; },
     };
-    const assimilate = makeSchedulable(function* () {
-      assert.equal(yield* child.command(thenable), 42);
-      assert.equal(yield* child.command(callableThenable), 17);
-      try {
-        yield* child.command(throwing);
-        assert.fail("expected getter failure");
-      } catch (caught) {
-        assert.equal(caught, error);
-      }
+    const preserve = makeSchedulable(function* () {
+      assert.equal(yield* child.command(thenable), thenable);
+      assert.equal(yield* child.command(callableThenable), callableThenable);
+      assert.equal(yield* child.command(throwing), throwing);
     });
-    await async(assimilate, signal)();
+    await async(preserve, signal)();
+  });
+
+  test(`${immediate ? "immediate" : "non-immediate"} child promises allow sibling calls to run`, async () => {
+    const { promise, resolve } = Promise.withResolvers<number>();
+    const events: string[] = [];
+    const first = makeSchedulable(function* () {
+      if (!immediate) yield* commands.getSignal;
+      events.push("first");
+      return promise;
+    });
+    const second = makeSchedulable(function* () {
+      if (!immediate) yield* commands.getSignal;
+      events.push("second");
+      resolve(42);
+      return 17;
+    });
+    const parent = makeSchedulable(function* () {
+      const firstResult = yield* first.command();
+      assert.equal(firstResult, promise);
+      const secondResult = yield* second.command();
+      return Promise.all([firstResult, secondResult]);
+    });
+    const signal = {
+      aborted: false,
+      shouldYield: false,
+      throwIfAborted() {},
+      bump() {},
+    };
+    const pending = async(parent, signal)();
+    try {
+      assert.deepEqual(events, ["first", "second"]);
+      assert.deepEqual(await pending, [42, 17]);
+    } finally {
+      // Unblock a regressed implementation before leaving the test.
+      resolve(42);
+      await pending.catch(() => {});
+    }
+  });
+
+  test(`${immediate ? "immediate" : "non-immediate"} child rejections remain promise values`, async () => {
+    const error = new Error("returned rejection");
+    const child = makeSchedulable(function* () {
+      if (!immediate) yield* commands.getSignal;
+      return Promise.reject(error);
+    });
+    const parent = makeSchedulable(function* () {
+      let result: Promise<number>;
+      try {
+        result = yield* child.command();
+      } catch {
+        assert.fail("returning a rejection must not throw into the caller");
+      }
+      return result.catch((caught) => {
+        assert.equal(caught, error);
+        return 42;
+      });
+    });
+    assert.equal(await async(parent)(), 42);
+
+    const propagate = makeSchedulable(function* () {
+      return yield* child.command();
+    });
+    await assert.rejects(async(propagate)(), (caught) => caught === error);
   });
 }

@@ -70,6 +70,8 @@ Put this check inside long loops, as in `sum` above, to keep the UI responsive.
 
 Call another function and get its result, using the current execution mode.
 Schedulable functions inherit the current scheduler they are running in.
+Promise-valued results are passed back unchanged, so callers can start other
+operations before waiting for them. This also applies to the `.command` shortcut.
 
 ```ts
 const sumBatches = makeSchedulable(function* sumBatches(
@@ -101,6 +103,8 @@ the generator call signatures in its `command` property too.
 
 Call an external dependency's synchronous or promise-returning implementation,
 depending on how your function is run, and get its result.
+In async mode, the scheduler awaits the async implementation before resuming
+the caller.
 
 The returned wrapper can be reused across calls and schedulers. Use `.call` or
 `.bind` when the implementations need a receiver.

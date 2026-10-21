@@ -74,19 +74,8 @@ async function executeIterableAsync(
       const parent = parents.pop();
       if (!parent) return result.value;
       iterator = parent;
-      try {
-        const value = result.value;
-        nextArg =
-          value !== null &&
-          (typeof value === "object" || typeof value === "function") &&
-          "then" in value &&
-          typeof value.then === "function"
-            ? await value
-            : value;
-      } catch (error) {
-        nextArg = error;
-        throwing = true;
-      }
+      // Returning a promise is distinct from explicitly awaiting a syncAware command.
+      nextArg = result.value;
       continue;
     }
     try {
@@ -115,14 +104,7 @@ async function executeIterableAsync(
               [Symbol.iterator]();
             const first = child.next();
             if (first.done) {
-              const value = first.value;
-              nextArg =
-                value !== null &&
-                (typeof value === "object" || typeof value === "function") &&
-                "then" in value &&
-                typeof value.then === "function"
-                  ? await value
-                  : value;
+              nextArg = first.value;
             } else {
               parents.push(iterator);
               iterator = child;
