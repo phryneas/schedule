@@ -24,7 +24,7 @@ const generic = makeSchedulable<{
   [key]: {
     <T>(value: T): SchedulableIterable<T>;
     syncSignature?<T>(value: T): T;
-    asyncSignature?<T>(value: T): Promise<T>;
+    asyncSignature?<T>(value: T): Promise<Awaited<T>>;
   };
 }>(function* <T>(value: T): SchedulableIterable<T> { return value; });
 expectTypeOf(commands.execute(generic)(42)).toEqualTypeOf<SchedulableIterable<number>>();

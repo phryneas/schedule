@@ -300,7 +300,9 @@ export default function schedulerPlugin(
             : resultType(node);
           const output = mode === "sync" ? ret : t.tsTypeReference(
             mode === "async" ? t.identifier("Promise") : clone(iterable),
-            t.tsTypeParameterInstantiation([ret]),
+            t.tsTypeParameterInstantiation([mode === "async"
+              ? t.tsTypeReference(t.identifier("Awaited"), t.tsTypeParameterInstantiation([ret]))
+              : ret]),
           );
           return t.tsFunctionType(node.typeParameters ? clone(node.typeParameters) : null, params, t.tsTypeAnnotation(output));
         }

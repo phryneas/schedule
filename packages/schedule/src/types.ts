@@ -21,7 +21,7 @@ interface SchedulableImplementation<
 > {
   (this: ThisArg, ...args: Args): SchedulableIterable<Ret>;
   syncSignature?: (this: ThisArg, ...args: Args) => Ret;
-  asyncSignature?: (this: ThisArg, ...args: Args) => Promise<Ret>;
+  asyncSignature?: (this: ThisArg, ...args: Args) => Promise<Awaited<Ret>>;
 }
 
 export interface SchedulableFunction<
@@ -41,7 +41,7 @@ type MethodOf<This, Args extends unknown[], Ret> = {
 interface SchedulableMethodImplementation<ThisArg, Args extends unknown[], Ret>
   extends MethodOf<ThisArg, Args, SchedulableIterable<Ret>> {
   syncSignature?(this: ThisArg, ...args: Args): Ret;
-  asyncSignature?(this: ThisArg, ...args: Args): Promise<Ret>;
+  asyncSignature?(this: ThisArg, ...args: Args): Promise<Awaited<Ret>>;
 }
 
 interface SchedulableMethodSignature<ThisArg, Args extends unknown[], Ret>

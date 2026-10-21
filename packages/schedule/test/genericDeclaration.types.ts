@@ -9,7 +9,7 @@ export const scheduled = makeSchedulable<{
   [schedulableImplementationSignal]: {
     <X>(x: X): SchedulableIterable<X>;
     syncSignature?<X>(x: X): X;
-    asyncSignature?<X>(x: X): Promise<X>;
+    asyncSignature?<X>(x: X): Promise<Awaited<X>>;
   };
 }>(function* <X>(x: X): SchedulableIterable<X> {
   return x;

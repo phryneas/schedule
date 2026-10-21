@@ -9,7 +9,7 @@ type Identity = {
   [key]: {
     <T>(value: T): SchedulableIterable<T>;
     syncSignature?<T>(value: T): T;
-    asyncSignature?<T>(value: T): Promise<T>;
+    asyncSignature?<T>(value: T): Promise<Awaited<T>>;
   };
 };
 const identity = makeSchedulable<Identity>(function* <T>(value: T): SchedulableIterable<T> {

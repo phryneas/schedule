@@ -98,6 +98,10 @@ const result = yield* object.method.command.bind(object)(arg);
 Use `commands.execute` for callbacks that may be ordinary functions. When
 supplying a full generic or overloaded signature to `makeSchedulable`, include
 the generator call signatures in its `command` property too.
+For these manually supplied signatures, declare `asyncSignature` with
+`Promise<Awaited<T>>` for each synchronous return type `T`; the supplied metadata
+determines the type returned by `async(fn)`. Keep `T` unchanged in the synchronous
+signature and `SchedulableIterable<T>` in the generator and command signatures.
 
 ### `commands.syncAware({ sync, async })(...args)`
 
