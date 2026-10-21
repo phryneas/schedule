@@ -9,7 +9,7 @@ index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd
 +  async as scheduled,
 +  commands,
 +  makeSchedulable,
-+  schedulableImplementationSignal,
++  schedulableImplementationSymbol,
 +  type SchedulableIterable,
 +} from '@phryneas/schedule';
  import { expect } from 'chai';
@@ -38,7 +38,7 @@ index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd
 +  it(
 +    'yields between definitions while parsing each definition synchronously',
 +    {
-+      skip: !(schedulableImplementationSignal in parse),
++      skip: !(schedulableImplementationSymbol in parse),
 +    },
 +    async (t) => {
 +      const source =
@@ -47,20 +47,20 @@ index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd
 +      const events: Array<string> = [];
 +      const method = Parser.prototype.parseDefinition;
 +      if (
-+        !(schedulableImplementationSignal in method) ||
-+        typeof method[schedulableImplementationSignal] !== 'function'
++        !(schedulableImplementationSymbol in method) ||
++        typeof method[schedulableImplementationSymbol] !== 'function'
 +      ) {
 +        throw new Error('Expected parseDefinition to be schedulable');
 +      }
-+      const original = method[schedulableImplementationSignal];
-+      method[schedulableImplementationSignal] = function* (
++      const original = method[schedulableImplementationSymbol];
++      method[schedulableImplementationSymbol] = function* (
 +        this: Parser,
 +      ): SchedulableIterable<DefinitionNode> {
 +        events.push('definition');
 +        return yield* original.call(this);
 +      };
 +      t.after(() => {
-+        method[schedulableImplementationSignal] = original;
++        method[schedulableImplementationSymbol] = original;
 +      });
 +      let expired = true;
 +      const signal = {

@@ -40,7 +40,7 @@ export default function schedulerPlugin(
         const make = program.scope.generateUidIdentifier("makeSchedulable");
         const commands = program.scope.generateUidIdentifier("commands");
         const iterable = program.scope.generateUidIdentifier("SchedulableIterable");
-        const marker = program.scope.generateUidIdentifier("schedulableImplementationSignal");
+        const marker = program.scope.generateUidIdentifier("schedulableImplementationSymbol");
         const methodType = program.scope.generateUidIdentifier("SchedulableMethod");
         const functionType = program.scope.generateUidIdentifier("SchedulableFunction");
         const functions: NodePath<any>[] = [];
@@ -958,13 +958,13 @@ export default function schedulerPlugin(
           program.unshiftContainer("body", t.importDeclaration([
             t.importSpecifier(clone(make), t.identifier("makeSchedulable")),
             ...(usedCommands ? [t.importSpecifier(clone(commands), t.identifier("commands"))] : []),
-            ...(usedRuntimeMarker ? [t.importSpecifier(clone(marker), t.identifier("schedulableImplementationSignal"))] : []),
+            ...(usedRuntimeMarker ? [t.importSpecifier(clone(marker), t.identifier("schedulableImplementationSymbol"))] : []),
           ], t.stringLiteral(options.runtimeModule ?? "@phryneas/schedule")));
         }
         if (usedTypes) {
           const declaration = t.importDeclaration([
             t.importSpecifier(clone(iterable), t.identifier("SchedulableIterable")),
-            ...(!usedRuntimeMarker ? [t.importSpecifier(clone(marker), t.identifier("schedulableImplementationSignal"))] : []),
+            ...(!usedRuntimeMarker ? [t.importSpecifier(clone(marker), t.identifier("schedulableImplementationSymbol"))] : []),
             ...(usedMethodType ? [t.importSpecifier(clone(methodType), t.identifier("SchedulableMethod"))] : []),
             ...(usedFunctionType ? [t.importSpecifier(clone(functionType), t.identifier("SchedulableFunction"))] : []),
           ], t.stringLiteral(options.runtimeModule ?? "@phryneas/schedule"));

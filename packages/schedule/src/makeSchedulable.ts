@@ -1,4 +1,4 @@
-import { schedulableImplementationSignal } from "./internal.ts";
+import { schedulableImplementationSymbol } from "./internal.ts";
 import { executeIterableSync } from "./syncScheduler.ts";
 import { execute } from "./commands.ts";
 import type {
@@ -33,8 +33,8 @@ export function makeSchedulable<
     (...args: any[]) => Promise<unknown>
   >,
 >(
-  schedulableImplementation: FullSignature extends FullSignature[typeof schedulableImplementationSignal]["syncSignature"]
-    ? FullSignature[typeof schedulableImplementationSignal]
+  schedulableImplementation: FullSignature extends FullSignature[typeof schedulableImplementationSymbol]["syncSignature"]
+    ? FullSignature[typeof schedulableImplementationSymbol]
     : never,
 ): FullSignature;
 
@@ -56,7 +56,7 @@ export function makeSchedulable<
   };
 
   const result = Object.assign(schedulable[name]!, {
-    [schedulableImplementationSignal]: schedulableImplementation,
+    [schedulableImplementationSymbol]: schedulableImplementation,
     command: execute(schedulable[name]!),
   });
   Object.defineProperty(result, "command", { enumerable: false });

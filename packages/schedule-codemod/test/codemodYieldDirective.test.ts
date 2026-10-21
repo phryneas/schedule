@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { transformSource } from "../src/index.ts";
 import { async as scheduled } from "../../schedule/src/index.ts";
-import { schedulableImplementationSignal } from "../../schedule/src/internal.ts";
+import { schedulableImplementationSymbol } from "../../schedule/src/internal.ts";
 
 const runtimeModule = new URL("../../schedule/src/index.ts", import.meta.url).href;
 
@@ -24,7 +24,7 @@ test("directives make a loop schedulable and yield at the marked positions", asy
   assert.equal(module.sum([1, 2, 3]), 6);
   assert.equal(await scheduled(module.sum)([1, 2, 3]), 6);
   for (const shouldYield of [false, true]) {
-    const iterator = module.sum[schedulableImplementationSignal]([1, 2, 3]);
+    const iterator = module.sum[schedulableImplementationSymbol]([1, 2, 3]);
     assert.deepEqual(iterator.next().value, { kind: "getSignal" });
     let step = iterator.next({ shouldYield });
     let yields = 0;
@@ -51,7 +51,7 @@ test("multiple checkpoints share a signal and avoid existing variable names", as
   assert.equal((output.match(/\.yieldNow/g) ?? []).length, 3);
   assert.match(output, /const _signal2 = yield\* _commands.getSignal/);
   const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
-  const iterator = module.work[schedulableImplementationSignal](true, 7);
+  const iterator = module.work[schedulableImplementationSymbol](true, 7);
   assert.deepEqual(iterator.next().value, { kind: "getSignal" });
   assert.deepEqual(iterator.next({ shouldYield: false }), { done: true, value: 7 });
 });

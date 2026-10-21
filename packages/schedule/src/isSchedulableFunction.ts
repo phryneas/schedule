@@ -1,8 +1,8 @@
-import { schedulableImplementationSignal } from "./internal.ts";
+import { schedulableImplementationSymbol } from "./internal.ts";
 import type { SchedulableFunction } from "./types.ts";
 
 export function isSchedulableFunction<Ret, Args extends Array<unknown>>(
   fn: unknown,
 ): fn is SchedulableFunction<Ret, Args> {
-  return typeof fn === "function" && schedulableImplementationSignal in fn;
+  return typeof fn === "function" && schedulableImplementationSymbol in fn;
 }

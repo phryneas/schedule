@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { transformSource } from "../src/index.ts";
-import { schedulableImplementationSignal } from "../../schedule/src/index.ts";
+import { schedulableImplementationSymbol } from "../../schedule/src/index.ts";
 
 const runtimeModule = new URL("../../schedule/src/index.ts", import.meta.url).href;
 
@@ -34,7 +34,7 @@ test("early returns and conditional expressions keep acquisition lazy", async ()
 async function generator(body: string) {
   const output = transformSource(`export function work(kind, fn) { ${body} }`, "fixture.js", { runtimeModule });
   const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
-  return module.work[schedulableImplementationSignal];
+  return module.work[schedulableImplementationSymbol];
 }
 
 test("computed keys initialize the signal for the following assignment value", async () => {
@@ -47,7 +47,7 @@ test("computed keys initialize the signal for the following assignment value", a
   }`, "fixture.js", { runtimeModule });
   assert.equal((output.match(/\?\?=/g) ?? []).length, 1);
   const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
-  const iterator = module.map[schedulableImplementationSignal]([1, 2], String, (n: number) => n * 2);
+  const iterator = module.map[schedulableImplementationSymbol]([1, 2], String, (n: number) => n * 2);
   assert.deepEqual(iterator.next().value, { kind: "getSignal" });
   assert.deepEqual(iterator.next({ shouldYield: false }), { done: true, value: { 1: 2, 2: 4 } });
 });
@@ -66,7 +66,7 @@ test("successive statements in a loop share initialization but conditional ones 
     }`, "fixture.js", { runtimeModule });
     assert.equal((output.match(/\?\?=/g) ?? []).length, expected);
     const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
-    const iterator = module.work[schedulableImplementationSignal](false, () => {});
+    const iterator = module.work[schedulableImplementationSymbol](false, () => {});
     assert.deepEqual(iterator.next().value, { kind: "getSignal" });
     assert.deepEqual(iterator.next({ shouldYield: false }), { done: true, value: undefined });
   }

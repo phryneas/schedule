@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { makeSchedulable } from "../src/index.ts";
-import { schedulableImplementationSignal as key } from "../src/internal.ts";
+import { schedulableImplementationSymbol as key } from "../src/internal.ts";
 import { isSchedulableFunction } from "../src/isSchedulableFunction.ts";
 
 test("the scheduler symbol retains the generator implementation", () => {
@@ -27,7 +27,7 @@ test("declaration consumers retain the explicit symbol marker and generic callba
   }
   compile(["-p", "tsconfig.test-types.json", "--noEmit", "false", "--emitDeclarationOnly", "--outDir", output]);
   const declaration = await readFile(join(output, "test/genericDeclaration.types.d.ts"), "utf8");
-  assert.match(declaration, /\[schedulableImplementationSignal\]/);
+  assert.match(declaration, /\[schedulableImplementationSymbol\]/);
   const consumer = join(output, "consumer.mts");
   await writeFile(consumer, `
     import { expectTypeOf } from "expect-type";

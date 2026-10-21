@@ -3,7 +3,7 @@ import type {
   SchedulableMarker,
   ScheduleSignal,
 } from "./types.ts";
-import type { schedulableImplementationSignal } from "./internal.ts";
+import type { schedulableImplementationSymbol } from "./internal.ts";
 import { SingleCommand } from "./singleCommand.ts";
 import { ReusableCommand } from "./reusableCommand.ts";
 import type {
@@ -58,7 +58,7 @@ export function execute<Fn extends (...args: any[]) => unknown>(
   any,
   any
 >
-  ? Fn[typeof schedulableImplementationSignal]
+  ? Fn[typeof schedulableImplementationSymbol]
   : MapResults<Fn, ToSchedulable>;
 export function execute<Ret, Args extends Array<unknown>, ThisArg>(
   fn: (this: ThisArg, ...args: Args) => Ret,

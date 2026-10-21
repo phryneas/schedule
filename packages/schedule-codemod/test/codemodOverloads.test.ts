@@ -92,7 +92,7 @@ test(`standalone generator overloads preserve published call signatures (${mode 
   const declarations = join(directory, "declarations");
   compile(["--declaration", "--emitDeclarationOnly", "--rootDir", root, "--outDir", declarations, source]);
   const declaration = join(declarations, relative(root, directory), "generated.d.mts");
-  assert.match(await readFile(declaration, "utf8"), /schedulableImplementationSignal/);
+  assert.match(await readFile(declaration, "utf8"), /schedulableImplementationSymbol/);
   const consumer = join(directory, "consumer.mts");
   await writeFile(consumer, `
     import { expectTypeOf } from "expect-type";

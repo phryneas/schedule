@@ -1,1 +1,1 @@
-export const schedulableImplementationSignal = Symbol();
+export const schedulableImplementationSymbol = Symbol();

@@ -1,6 +1,6 @@
 import { expectTypeOf } from "expect-type";
 import { async, commands, makeSchedulable, sync } from "../src/index.ts";
-import type { SchedulableIterable, SchedulableMethod, schedulableImplementationSignal as key } from "../src/index.ts";
+import type { SchedulableIterable, SchedulableMethod, schedulableImplementationSymbol as key } from "../src/index.ts";
 
 const child = makeSchedulable(function* (value: number) {
   return Promise.resolve(value);

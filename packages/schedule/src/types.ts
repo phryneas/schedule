@@ -1,5 +1,5 @@
 import type { Command } from "./commands.ts";
-import type { schedulableImplementationSignal } from "./internal.ts";
+import type { schedulableImplementationSymbol } from "./internal.ts";
 
 export type SchedulableIterable<T> = Generator<Command, T>;
 
@@ -8,7 +8,7 @@ export interface SchedulableMarker<
   SyncSignature extends (...args: any[]) => any,
   AsyncSignature extends (...args: any[]) => Promise<any>,
 > {
-  [schedulableImplementationSignal]: GeneratorSignature & {
+  [schedulableImplementationSymbol]: GeneratorSignature & {
     syncSignature?: SyncSignature;
     asyncSignature?: AsyncSignature;
   };
@@ -30,7 +30,7 @@ export interface SchedulableFunction<
   ThisArg = unknown,
 > {
   (this: ThisArg, ...args: Args): Ret;
-  [schedulableImplementationSignal]: SchedulableImplementation<Ret, Args, ThisArg>;
+  [schedulableImplementationSymbol]: SchedulableImplementation<Ret, Args, ThisArg>;
   command: SchedulableImplementation<Ret, Args, ThisArg>;
 }
 
@@ -46,7 +46,7 @@ interface SchedulableMethodImplementation<ThisArg, Args extends unknown[], Ret>
 
 interface SchedulableMethodSignature<ThisArg, Args extends unknown[], Ret>
   extends MethodOf<ThisArg, Args, Ret> {
-  [schedulableImplementationSignal]: SchedulableMethodImplementation<ThisArg, Args, Ret>;
+  [schedulableImplementationSymbol]: SchedulableMethodImplementation<ThisArg, Args, Ret>;
   command: SchedulableMethodImplementation<ThisArg, Args, Ret>;
 }
 

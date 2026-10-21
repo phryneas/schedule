@@ -1,7 +1,7 @@
 import { expectTypeOf } from "expect-type";
 import { async, commands, makeSchedulable, sync } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
-import type { schedulableImplementationSignal as key } from "../src/index.ts";
+import type { schedulableImplementationSymbol as key } from "../src/index.ts";
 
 type Identity = {
   <T>(value: T): T;

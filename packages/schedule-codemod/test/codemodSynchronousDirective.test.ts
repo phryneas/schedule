@@ -9,7 +9,7 @@ test("synchronous calls retain surrounding checkpoints and scheduled arguments",
     return fn(input());
   }`, "fixture.ts");
   assert.match(result, /yield\* _commands.yieldNow/);
-  assert.match(result, /return fn\([^]*?_scheduled = _schedulableImplementationSignal in input, _scheduled \? yield\* _commands.execute\(input\)\(\) : input\(\)/);
+  assert.match(result, /return fn\([^]*?_scheduled = _schedulableImplementationSymbol in input, _scheduled \? yield\* _commands.execute\(input\)\(\) : input\(\)/);
   assert.doesNotMatch(result, /execute\(fn\)/);
 });
 

@@ -1,4 +1,4 @@
-import { schedulableImplementationSignal } from "./internal.ts";
+import { schedulableImplementationSymbol } from "./internal.ts";
 import { isSchedulableFunction } from "./isSchedulableFunction.ts";
 import type { Command } from "./commands.ts";
 import type {
@@ -12,10 +12,10 @@ export function async<
 >(
   fn: Fn,
   signal?: AbortSignal | ScheduleSignal,
-): NonNullable<Fn[typeof schedulableImplementationSignal]["asyncSignature"]> {
+): NonNullable<Fn[typeof schedulableImplementationSymbol]["asyncSignature"]> {
   return function (this: any) {
     return executeIterableAsync(
-      fn[schedulableImplementationSignal].apply(this, arguments as any),
+      fn[schedulableImplementationSymbol].apply(this, arguments as any),
       signal,
     );
   };
@@ -99,7 +99,7 @@ async function executeIterableAsync(
             scheduleSignal.bump();
           }
           if (isSchedulableFunction(fn)) {
-            const child = fn[schedulableImplementationSignal]
+            const child = fn[schedulableImplementationSymbol]
               .apply(thisArg, args)
               [Symbol.iterator]();
             const first = child.next();

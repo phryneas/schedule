@@ -2,7 +2,7 @@ import { expectTypeOf } from "expect-type";
 import { async, execute, getSignal, makeSchedulable, sync, yieldNow } from "../src/index.ts";
 import type { ScheduleSignal } from "../src/types.ts";
 import type { SchedulableIterable } from "../src/index.ts";
-import type { schedulableImplementationSignal as key } from "../src/index.ts";
+import type { schedulableImplementationSymbol as key } from "../src/index.ts";
 
 const sum = makeSchedulable(function* (
   values: number[],
