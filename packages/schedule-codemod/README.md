@@ -63,6 +63,12 @@ The comment must appear between statements inside a braced body; an empty body
 or the end of a body also works. Directives in excluded functions, such as inline
 callbacks, report an error.
 
+The codemod keeps `finally` cleanup synchronous: calls retain their synchronous
+calling convention, and `may-yield-here` directives there are ignored. This lets
+cleanup finish when cancellation closes a generator without resuming yielded
+work. Long-running cleanup therefore blocks until it finishes. A separate
+function defined inside `finally` can still be transformed normally.
+
 Functions are wrapped only when the resulting body contains a yield, whether
 from a directive or a call converted to `commands.execute`. A loop alone does
 not cause wrapping.

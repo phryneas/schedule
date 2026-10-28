@@ -23,6 +23,9 @@ export function async<
     if (!startImmediately) {
       await new Promise<void>(schedule);
     }
+
+    signal?.throwIfAborted();
+
     return executeIterableAsync(
       fn[schedulableImplementationSymbol].apply(this, arguments as any),
       signal,
@@ -62,6 +65,7 @@ async function executeIterableAsync(
   let nextArg: unknown;
   let throwing = false;
   do {
+    checkAborted();
     let result: IteratorResult<Command, unknown>;
     try {
       result =
@@ -90,12 +94,12 @@ async function executeIterableAsync(
     try {
       switch (result.value.kind) {
         case "getSignal": {
-          scheduleSignal.throwIfAborted();
           nextArg = scheduleSignal;
           continue;
         }
         case "yield": {
           await new Promise<void>(schedule);
+          checkAborted();
           scheduleSignal.bump();
           // A defined resumption value completes the reusable yield command.
           nextArg = null;
@@ -105,6 +109,7 @@ async function executeIterableAsync(
           const { fn, args, this: thisArg, startImmediately } = result.value;
           if (!startImmediately && scheduleSignal.shouldYield) {
             await new Promise<void>(schedule);
+            checkAborted();
             scheduleSignal.bump();
           }
           if (isSchedulableFunction(fn)) {
@@ -128,6 +133,7 @@ async function executeIterableAsync(
           const { async, args, this: thisArg, startImmediately } = result.value;
           if (!startImmediately && scheduleSignal.shouldYield) {
             await new Promise<void>(schedule);
+            checkAborted();
             scheduleSignal.bump();
           }
           nextArg = await async.apply(thisArg, args);
@@ -139,6 +145,19 @@ async function executeIterableAsync(
       throwing = true;
     }
   } while (true);
+
+  function checkAborted() {
+    if (scheduleSignal.aborted) {
+      for (const frame of [iterator, ...parents.reverse()]) {
+        try {
+          while (!frame.return(undefined).done) {}
+        } catch {
+          // Finish closing the other frames even if cleanup throws.
+        }
+      }
+      return scheduleSignal.throwIfAborted();
+    }
+  }
 }
 
 function schedule(fn: () => void) {

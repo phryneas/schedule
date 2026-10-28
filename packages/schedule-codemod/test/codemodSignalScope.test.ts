@@ -142,11 +142,10 @@ test("signal acquisition does not move into a catchable region", async () => {
   assert.throws(() => iterator.throw(error), value => value === error);
 });
 
-test("signal acquisition stays outside nested try, catch, and finally blocks", async () => {
+test("signal acquisition stays outside nested try and catch blocks", async () => {
   for (const body of [
     `try { try { fn.call(null); } catch {} } catch { return 'caught'; }`,
     `try { throw 1; } catch { fn.call(null); }`,
-    `try { return 7; } finally { fn.call(null); }`,
   ]) {
     let calls = 0;
     const work = await generator(body);

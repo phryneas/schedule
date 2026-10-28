@@ -96,6 +96,13 @@ export default function schedulerPlugin(
           return found;
         }
 
+        function isInFinally(path: NodePath): boolean {
+          for (let current: NodePath | null = path; current && !current.isFunction(); current = current.parentPath) {
+            if (current.key === "finalizer" && current.parentPath?.isTryStatement()) return true;
+          }
+          return false;
+        }
+
         function eligibleScope(path: NodePath<any>): boolean {
           if (path.isClassMethod() || path.isClassPrivateMethod()) return true;
           if (path.isObjectMethod()) return false;
@@ -230,6 +237,8 @@ export default function schedulerPlugin(
           if (!owner || !functions.includes(owner) || owner.node.async || owner.node.generator) {
             throw block.buildCodeFrameError("may-yield-here is inside a function excluded from transformation (or outside a function).");
           }
+          // Cancellation closes generators with return(); cleanup must not suspend.
+          if (isInFinally(block)) continue;
           const entries = directives.get(owner) ?? [];
           entries.push({ block, comment });
           directives.set(owner, entries);
@@ -406,7 +415,7 @@ export default function schedulerPlugin(
                 const node = call.node;
                 const info = options.analysis?.calls.get(node.end!);
                 const cached = info?.targets?.every(target => options.analysis?.commandTargets?.get(target.file)?.has(target.end));
-                const direct = isExplicit(call) || synchronousCalls.has(node) || info?.direct || !!(info?.targets && options.analysis?.commandTargets &&
+                const direct = isInFinally(call) || isExplicit(call) || synchronousCalls.has(node) || info?.direct || !!(info?.targets && options.analysis?.commandTargets &&
                   info.targets.every(target => !options.analysis!.commandTargets!.get(target.file)?.has(target.end)));
                 const superMethod = t.isMemberExpression(node.callee) && t.isSuper(node.callee.object);
                 if (direct && superMethod && !processingDirectSuper) {
@@ -511,8 +520,11 @@ export default function schedulerPlugin(
             },
             OptionalCallExpression(call: NodePath<Types.OptionalCallExpression>) {
               const node = call.node;
+              if ((t.isMemberExpression(node.callee) || t.isOptionalMemberExpression(node.callee)) && t.isSuper(node.callee.object)) {
+                throw call.buildCodeFrameError("Optional superclass method calls are not supported; replace this call with an explicit conditional before running the codemod.");
+              }
               const info = options.analysis?.calls.get(node.end!);
-              if (isExplicit(call) || synchronousCalls.has(node) || info?.direct || (info?.targets && options.analysis?.commandTargets &&
+              if (isInFinally(call) || isExplicit(call) || synchronousCalls.has(node) || info?.direct || (info?.targets && options.analysis?.commandTargets &&
                 info.targets.every(target => !options.analysis!.commandTargets!.get(target.file)?.has(target.end)))) return;
               const target = path.scope.generateUidIdentifier("optional");
               path.scope.push({ id: clone(target), kind: "let" });
@@ -555,10 +567,12 @@ export default function schedulerPlugin(
               ]));
             },
           };
+          // Babel normalizes visitor handlers to arrays during traversal.
+          const transformCall = visitor.CallExpression.exit;
           body.traverse(visitor);
           if (hasYield(path)) {
             processingDirectSuper = true;
-            for (const call of directSuperCalls) visitor.CallExpression.exit(call);
+            for (const call of directSuperCalls) transformCall(call);
           }
           return signal;
         }

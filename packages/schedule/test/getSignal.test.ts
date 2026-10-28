@@ -54,7 +54,7 @@ test("async syncAware callbacks use a signal captured by the generator", async (
 
   work();
   const pending = async(work, { signal: controller.signal })();
-  await pending;
+  await assert.rejects(pending, { name: "AbortError" });
 });
 
 test("requesting a signal rejects an already aborted run", async () => {
