@@ -10,6 +10,54 @@ import {
 } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
+for (const options of [undefined, {}, { startImmediately: true }, { startImmediately: false }]) {
+  test(`async entry timing with options ${JSON.stringify(options)}`, async () => {
+    const events: string[] = [];
+    const work = makeSchedulable(function (this: { base: number }, value: number) {
+      events.push("create");
+      const result = this.base + value;
+      return (function* () {
+        events.push("run");
+        return result;
+      })();
+    });
+    const run = async(work, options);
+    assert.deepEqual(events, []);
+    const pending = run.call({ base: 40 }, 2);
+    const beforeYield = options?.startImmediately ? ["create", "run"] : [];
+    assert.deepEqual(events, beforeYield);
+    await Promise.resolve();
+    assert.deepEqual(events, beforeYield);
+    assert.equal(await pending, 42);
+    assert.deepEqual(events, ["create", "run"]);
+  });
+}
+
+test("deferred entry observes cancellation before its first signal acquisition", async () => {
+  const controller = new AbortController();
+  let finished = false;
+  const work = makeSchedulable(function* () {
+    yield* getSignal;
+    finished = true;
+  });
+  const pending = async(work, {
+    signal: controller.signal,
+    startImmediately: false,
+  })();
+  controller.abort();
+  await assert.rejects(pending, { name: "AbortError" });
+  assert.equal(finished, false);
+});
+
+test("deferred entry rejects errors thrown while creating the iterable", async () => {
+  const error = new Error("factory failed");
+  const work = makeSchedulable(function (): SchedulableIterable<never> {
+    throw error;
+  });
+  const pending = async(work, { startImmediately: false })();
+  await assert.rejects(pending, reason => reason === error);
+});
+
 test("async rejects errors thrown while creating the iterable", async () => {
   const error = new Error("parameter initialization failed");
   function fail(): never {
@@ -25,9 +73,9 @@ test("async rejects errors thrown while creating the iterable", async () => {
   });
 
   // Invoke before assert.rejects so a synchronous throw fails the test.
-  const parameterResult = async(defaultParameter)();
+  const parameterResult = async(defaultParameter, { startImmediately: true })();
   await assert.rejects(parameterResult, reason => reason === error);
-  const factoryResult = async(factory)();
+  const factoryResult = async(factory, { startImmediately: true })();
   await assert.rejects(factoryResult, reason => reason === undefined);
 });
 

@@ -16,6 +16,18 @@ expectTypeOf(async(sum)([1, 2, 3])).toEqualTypeOf<Promise<number>>();
 expectTypeOf(sync(sum)).parameters.toEqualTypeOf<[number[]]>();
 expectTypeOf(async(sum)).parameters.toEqualTypeOf<[number[]]>();
 
+declare const abortSignal: AbortSignal;
+declare const scheduleSignal: ScheduleSignal;
+expectTypeOf(async(sum, { signal: abortSignal, startImmediately: false })([1]))
+  .toEqualTypeOf<Promise<number>>();
+expectTypeOf(async(sum, { signal: scheduleSignal, startImmediately: true })([1]))
+  .toEqualTypeOf<Promise<number>>();
+expectTypeOf(async(sum, {})([1])).toEqualTypeOf<Promise<number>>();
+// @ts-expect-error Signals must be passed inside the options object.
+async(sum, abortSignal);
+// @ts-expect-error startImmediately must be a boolean.
+async(sum, { startImmediately: "false" });
+
 makeSchedulable(function* (): SchedulableIterable<number> {
   expectTypeOf(yield* yieldNow).toEqualTypeOf<void>();
   const signal = yield* getSignal;

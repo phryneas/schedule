@@ -110,7 +110,7 @@ export function run(fn: (this: { value: number }) => number, receiver: { value: 
     return this.value;
   });
   let finished = false;
-  const pending = scheduled(run, signal)(callback, { value: 42 }).then((value: unknown) => { finished = true; return value; });
+  const pending = scheduled(run, { signal })(callback, { value: 42 }).then((value: unknown) => { finished = true; return value; });
   await Promise.resolve();
   assert.equal(finished, false);
   assert.equal(await pending, 42);

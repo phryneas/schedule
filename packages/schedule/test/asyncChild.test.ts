@@ -180,7 +180,7 @@ for (const immediate of [true, false]) {
       throwIfAborted() {},
       bump() {},
     };
-    const pending = async(parent, signal)();
+    const pending = async(parent, { signal, startImmediately: true })();
     assert.equal(finished, true);
     await pending;
 
@@ -202,7 +202,7 @@ for (const immediate of [true, false]) {
       assert.equal(yield* child.command(callableThenable), callableThenable);
       assert.equal(yield* child.command(throwing), throwing);
     });
-    await async(preserve, signal)();
+    await async(preserve, { signal })();
   });
 
   test(`${immediate ? "immediate" : "non-immediate"} child promises allow sibling calls to run`, async () => {
@@ -231,7 +231,7 @@ for (const immediate of [true, false]) {
       throwIfAborted() {},
       bump() {},
     };
-    const pending = async(parent, signal)();
+    const pending = async(parent, { signal, startImmediately: true })();
     try {
       assert.deepEqual(events, ["first", "second"]);
       assert.deepEqual(await pending, [42, 17]);

@@ -11,7 +11,7 @@ test("AbortController cancels scheduled work", async () => {
     return 42;
   });
   const controller = new AbortController();
-  const pending = async(work, controller.signal)();
+  const pending = async(work, { signal: controller.signal, startImmediately: true })();
   controller.abort();
 
   await assert.rejects(pending, { name: "AbortError" });
@@ -28,7 +28,7 @@ test("execute propagates cancellation without affecting concurrent runs", async 
     return yield* execute(work)();
   });
   const controller = new AbortController();
-  const pending = async(parent, controller.signal)();
+  const pending = async(parent, { signal: controller.signal, startImmediately: true })();
   const independent = async(parent)();
   controller.abort();
 

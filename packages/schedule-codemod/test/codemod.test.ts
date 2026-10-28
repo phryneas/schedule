@@ -46,9 +46,9 @@ test("dynamic ordinary calls keep a deadline boundary and evaluate calls conditi
     get shouldYield() { return expired; },
     bump() { expired = false; events.push("yielded"); },
   };
-  assert.equal(await scheduled(module.run, signal)(object, argument, false), false);
+  assert.equal(await scheduled(module.run, { signal })(object, argument, false), false);
   assert.deepEqual(events, []);
-  const pending = scheduled(module.run, signal)(object, argument, true);
+  const pending = scheduled(module.run, { signal })(object, argument, true);
   assert.deepEqual(events, []);
   assert.equal(await pending, 10);
   assert.deepEqual(events, ["yielded", "get", "argument", "call"]);

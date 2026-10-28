@@ -59,13 +59,13 @@ test("command yields before entering its child when the deadline expires", async
   };
   const child = makeSchedulable(function* () { entered++; return 7; });
   const parent = makeSchedulable(function* () { return yield* child.command(); });
-  const promise = async(parent, signal)();
+  const promise = async(parent, { signal })();
   assert.equal(entered, 0);
   assert.equal(await promise, 7);
   assert.equal(bumps, 1);
 
   const controller = new AbortController();
   controller.abort();
-  await assert.rejects(async(parent, controller.signal)());
+  await assert.rejects(async(parent, { signal: controller.signal })());
   assert.equal(entered, 1);
 });

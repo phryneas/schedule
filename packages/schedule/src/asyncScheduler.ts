@@ -11,17 +11,22 @@ export function async<
   Fn extends SchedulableMarker<(...args: any[]) => any, any, any>,
 >(
   fn: Fn,
-  signal?: AbortSignal | ScheduleSignal,
+  {
+    signal,
+    startImmediately,
+  }: {
+    signal?: AbortSignal | ScheduleSignal;
+    startImmediately?: boolean;
+  } = {},
 ): NonNullable<Fn[typeof schedulableImplementationSymbol]["asyncSignature"]> {
-  return function (this: any) {
-    try {
-      return executeIterableAsync(
-        fn[schedulableImplementationSymbol].apply(this, arguments as any),
-        signal,
-      );
-    } catch (error) {
-      return Promise.reject(error);
+  return async function (this: any) {
+    if (!startImmediately) {
+      await new Promise<void>(schedule);
     }
+    return executeIterableAsync(
+      fn[schedulableImplementationSymbol].apply(this, arguments as any),
+      signal,
+    );
   };
 }
 

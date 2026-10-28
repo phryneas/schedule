@@ -78,7 +78,7 @@ index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd
 +      const run = makeSchedulable(function* () {
 +        return yield* commands.execute(parse, true)(source);
 +      });
-+      const result = await scheduled(run, signal)();
++      const result = await scheduled(run, { signal })();
 +      expect(result).to.deep.equal(expected);
 +      expect(result.tokenCount).to.equal(expected.tokenCount);
 +      expect(events.filter((event) => event !== 'check')).to.deep.equal([
@@ -155,7 +155,7 @@ index f6f05199a057ce2a245fef6be90833e2b3f23ca9..ad74ac110ec23c74499ec8d1a8761fe6
 +      const run = makeSchedulable(function* () {
 +        return yield* commands.execute(visit)(ast, callbacks);
 +      });
-+      await scheduled(run, signal)();
++      await scheduled(run, { signal })();
 +    }
 +    expect(names).to.deep.equal(['a', 'a']);
 +  });

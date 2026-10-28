@@ -16,10 +16,10 @@ test("getSignal preserves the supplied signal across repeated acquisitions", asy
     return first;
   });
   assert.equal(work().aborted, false);
-  assert.equal(await async(work, signal)(), signal);
+  assert.equal(await async(work, { signal })(), signal);
   const controller = new AbortController();
   controller.abort();
-  await assert.rejects(async(work, controller.signal)(), { name: "AbortError" });
+  await assert.rejects(async(work, { signal: controller.signal })(), { name: "AbortError" });
 });
 
 test("getSignal creates a command", () => {
@@ -53,7 +53,7 @@ test("async syncAware callbacks use a signal captured by the generator", async (
   });
 
   work();
-  const pending = async(work, controller.signal)();
+  const pending = async(work, { signal: controller.signal })();
   await pending;
 });
 
@@ -63,5 +63,5 @@ test("requesting a signal rejects an already aborted run", async () => {
   const work = makeSchedulable(function* () {
     return yield* getSignal;
   });
-  await assert.rejects(async(work, controller.signal)(), { name: "AbortError" });
+  await assert.rejects(async(work, { signal: controller.signal })(), { name: "AbortError" });
 });

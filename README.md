@@ -34,7 +34,11 @@ await async(sum)([1, 2, 3]); // 6, cooperatively
 ```
 
 Call the function directly or use `sync(fn)(...args)` for a synchronous result.
-Use `await async(fn, signal?)(...args)` to let other work run between chunks.
+Use `await async(fn, { signal, startImmediately })(...args)` to let other work
+run between chunks. By default, execution yields to the event loop before
+creating or running the iterable. Set `startImmediately: true` to start work
+immediately and yield cooperatively afterward. Pass an `AbortSignal` or
+`ScheduleSignal` as `signal` to control cancellation or scheduling.
 
 ## Commands
 
@@ -153,7 +157,7 @@ needed, for example when editor input changes or a component unmounts.
 
 ```ts
 const controller = new AbortController();
-const pending = async(sum, controller.signal)([1, 2, 3]);
+const pending = async(sum, { signal: controller.signal })([1, 2, 3]);
 
 // From an input-change handler or cleanup:
 controller.abort();
