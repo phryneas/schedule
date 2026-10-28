@@ -11,6 +11,44 @@ import {
 import type { SchedulableIterable } from "../src/index.ts";
 import type { ScheduleSignal } from "../src/types.ts";
 
+test("cancellation while advancing an iterator is terminal", async () => {
+  for (const resumeWithError of [false, true]) {
+    for (const returnImmediately of [false, true]) {
+      const controller = new AbortController();
+      const reason = new Error("cancelled during advancement");
+      const events: string[] = [];
+      const work = makeSchedulable(function* () {
+        yield* getSignal;
+        try {
+          if (resumeWithError) {
+            try {
+              yield* execute(() => {
+                throw new Error("callback failed");
+              })();
+            } catch {
+              controller.abort(reason);
+            }
+          } else {
+            controller.abort(reason);
+          }
+          if (!returnImmediately) {
+            yield* execute(() => events.push("callback after cancellation"), true)();
+          }
+          return 42;
+        } finally {
+          events.push("closed");
+        }
+      });
+
+      await assert.rejects(
+        async(work, { signal: controller.signal, startImmediately: true })(),
+        (error) => error === reason,
+      );
+      assert.deepEqual(events, ["closed"]);
+    }
+  }
+});
+
 test("AbortController cancels scheduled work", async () => {
   const work = makeSchedulable(function* (): SchedulableIterable<number> {
     const signal = yield* getSignal;

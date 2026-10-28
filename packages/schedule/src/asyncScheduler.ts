@@ -80,6 +80,7 @@ async function executeIterableAsync(
       throwing = true;
       continue;
     }
+    checkAborted();
     initialResult = undefined;
     throwing = false;
     nextArg = undefined;
