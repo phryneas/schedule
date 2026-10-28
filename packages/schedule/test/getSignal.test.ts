@@ -8,6 +8,8 @@ test("getSignal preserves the supplied signal across repeated acquisitions", asy
     aborted: false,
     shouldYield: false,
     throwIfAborted() {},
+    addEventListener() {},
+    removeEventListener() {},
     bump() {},
   };
   const work = makeSchedulable(function* (): SchedulableIterable<ScheduleSignal> {
@@ -24,6 +26,23 @@ test("getSignal preserves the supplied signal across repeated acquisitions", asy
 
 test("getSignal creates a command", () => {
   assert.deepEqual(getSignal.next(), { done: false, value: { kind: "getSignal" } });
+});
+
+test("getSignal forwards abort event subscriptions to the supplied AbortSignal", async () => {
+  const controller = new AbortController();
+  const work = makeSchedulable(function* () {
+    return yield* getSignal;
+  });
+  const signal = await async(work, { signal: controller.signal })();
+  let calls = 0;
+  const listener = () => { calls++; };
+  const removed = () => assert.fail("removed listener must not run");
+  signal.addEventListener("abort", listener, { once: true });
+  signal.addEventListener("abort", removed);
+  signal.removeEventListener("abort", removed);
+  controller.abort();
+  assert.equal(calls, 1);
+  assert.equal(signal.aborted, true);
 });
 
 test("getSignal works inside sync and async scheduler execution", async () => {

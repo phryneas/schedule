@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getEventListeners } from "node:events";
 import {
   makeSchedulable,
   async,
@@ -10,6 +11,104 @@ import {
 } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 import type { ScheduleSignal } from "../src/types.ts";
+
+for (const signalKind of ["AbortSignal", "ScheduleSignal"] as const) {
+  function wrapSignal(signal: AbortSignal): AbortSignal | ScheduleSignal {
+    if (signalKind === "AbortSignal") return signal;
+    return {
+      get aborted() {
+        return signal.aborted;
+      },
+      throwIfAborted: signal.throwIfAborted.bind(signal),
+      addEventListener: signal.addEventListener.bind(signal),
+      removeEventListener: signal.removeEventListener.bind(signal),
+      shouldYield: false,
+      bump() {},
+    };
+  }
+
+  test(`${signalKind}: syncAware removes abort listeners on settlement and observes late rejections`, async () => {
+    for (const outcome of [
+      "resolve",
+      "reject",
+      "abort",
+      "abort in callback",
+    ] as const) {
+      const controller = new AbortController();
+      const reason = new Error(outcome);
+      const operation = Promise.withResolvers<number>();
+      const work = makeSchedulable(function* () {
+        return yield* syncAware({
+          sync: () => 42,
+          async: () => {
+            if (outcome === "abort in callback") controller.abort(reason);
+            return operation.promise;
+          },
+          startImmediately: true,
+        })();
+      });
+      const pending = async(work, {
+        signal: wrapSignal(controller.signal),
+        startImmediately: true,
+      })();
+      if (outcome !== "abort in callback") {
+        assert.equal(getEventListeners(controller.signal, "abort").length, 1);
+      }
+      if (outcome === "resolve") {
+        operation.resolve(42);
+        assert.equal(await pending, 42);
+      } else {
+        const rejected = assert.rejects(pending, (error) => error === reason);
+        if (outcome === "reject") operation.reject(reason);
+        else controller.abort(reason);
+        await rejected;
+        // The external operation can still fail after the scheduler has cancelled.
+        operation.reject(new Error("late external failure"));
+      }
+      assert.equal(getEventListeners(controller.signal, "abort").length, 0);
+    }
+  });
+
+  test(
+    `${signalKind}: cancellation interrupts a pending syncAware operation and closes all frames`,
+    { timeout: 1000 },
+    async () => {
+      const controller = new AbortController();
+      const reason = new Error("cancelled while awaiting");
+      const events: string[] = [];
+      const child = makeSchedulable(function* () {
+        try {
+          yield* syncAware({
+            sync() {},
+            async: () => new Promise<void>(() => {}),
+            startImmediately: true,
+          })();
+          events.push("resumed");
+        } catch {
+          events.push("caught");
+        } finally {
+          events.push("child closed");
+        }
+      });
+      const parent = makeSchedulable(function* () {
+        try {
+          yield* execute(child, true)();
+        } finally {
+          events.push("parent closed");
+        }
+      });
+
+      const pending = async(parent, {
+        signal: wrapSignal(controller.signal),
+        startImmediately: true,
+      })();
+      controller.abort(reason);
+
+      await assert.rejects(pending, (error) => error === reason);
+      assert.deepEqual(events, ["child closed", "parent closed"]);
+    },
+  );
+}
 
 test("cancellation while advancing an iterator is terminal", async () => {
   for (const resumeWithError of [false, true]) {
@@ -111,6 +210,8 @@ test("cancellation during a scheduling wait closes active frames with a custom s
       throwIfAborted() {
         controller.signal.throwIfAborted();
       },
+      addEventListener: controller.signal.addEventListener.bind(controller.signal),
+      removeEventListener: controller.signal.removeEventListener.bind(controller.signal),
       shouldYield: true,
       bump() {
         events.push("bump");

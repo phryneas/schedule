@@ -49,6 +49,10 @@ async function executeIterableAsync(
       throwIfAborted() {
         abortSignal?.throwIfAborted();
       },
+      addEventListener:
+        abortSignal?.addEventListener.bind(abortSignal) ?? (() => {}),
+      removeEventListener:
+        abortSignal?.removeEventListener.bind(abortSignal) ?? (() => {}),
       get shouldYield() {
         abortSignal?.throwIfAborted();
         return performance.now() >= nextYield;
@@ -137,7 +141,27 @@ async function executeIterableAsync(
             checkAborted();
             scheduleSignal.bump();
           }
-          nextArg = await async.apply(thisArg, args);
+
+          const value = async.apply(thisArg, args);
+          if (scheduleSignal.aborted) {
+            Promise.resolve(value).catch(() => {});
+            checkAborted();
+          }
+          if (!abortSignal) {
+            nextArg = await value;
+          } else {
+            nextArg = await new Promise<unknown>((resolve, reject) => {
+              // Wake the scheduler so its terminal cancellation check closes the frames.
+              abortSignal.addEventListener("abort", reject, { once: true });
+              // Keep observing the operation even if cancellation wins the race.
+              Promise.resolve(value)
+                .then(resolve, reject)
+                .finally(() =>
+                  abortSignal.removeEventListener("abort", reject),
+                );
+            });
+          }
+
           continue;
         }
       }

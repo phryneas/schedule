@@ -47,6 +47,8 @@ test("overlapping asynchronous runs retain their own signals across yields", asy
     aborted: false,
     shouldYield: false,
     throwIfAborted() {},
+    addEventListener() {},
+    removeEventListener() {},
     bumps: 0,
     bump() { this.bumps++; },
   }));

@@ -103,7 +103,10 @@ export function run(fn: (this: { value: number }) => number, receiver: { value: 
   ], { encoding: "utf8" });
   assert.equal(compilation.status, 0, compilation.stdout + compilation.stderr);
   const { run } = await import(pathToFileURL(generated).href);
-  const signal = { shouldYield: false, aborted: false, throwIfAborted() {}, bump() {} };
+  const signal = {
+    shouldYield: false, aborted: false, throwIfAborted() {}, bump() {},
+    addEventListener() {}, removeEventListener() {},
+  };
   const callback = makeSchedulable(function* (this: { value: number }) {
     assert.equal(yield* commands.getSignal, signal);
     yield* commands.yieldNow;

@@ -178,6 +178,8 @@ for (const immediate of [true, false]) {
       aborted: false,
       shouldYield: false,
       throwIfAborted() {},
+      addEventListener() {},
+      removeEventListener() {},
       bump() {},
     };
     const pending = async(parent, { signal, startImmediately: true })();
@@ -229,6 +231,8 @@ for (const immediate of [true, false]) {
       aborted: false,
       shouldYield: false,
       throwIfAborted() {},
+      addEventListener() {},
+      removeEventListener() {},
       bump() {},
     };
     const pending = async(parent, { signal, startImmediately: true })();

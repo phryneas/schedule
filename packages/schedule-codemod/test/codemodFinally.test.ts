@@ -41,6 +41,8 @@ test("cancellation completes finally loops and synchronous cleanup calls", async
     signal: {
       get aborted() { return controller.signal.aborted; },
       throwIfAborted() { controller.signal.throwIfAborted(); },
+      addEventListener: controller.signal.addEventListener.bind(controller.signal),
+      removeEventListener: controller.signal.removeEventListener.bind(controller.signal),
       shouldYield: true,
       bump() {},
     },

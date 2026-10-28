@@ -9,6 +9,8 @@ import { isSchedulableFunction } from "./isSchedulableFunction.ts";
 export const syncSignal: ScheduleSignal = {
   shouldYield: false,
   aborted: false,
+  addEventListener() {},
+  removeEventListener() {},
   throwIfAborted() {
     /** */
   },

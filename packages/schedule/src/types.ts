@@ -58,7 +58,7 @@ export type SchedulableMethod<Fn extends (this: any, ...args: any[]) => unknown>
 
 export interface ScheduleSignal extends Pick<
   AbortSignal,
-  "aborted" | "throwIfAborted"
+  "aborted" | "throwIfAborted" | "addEventListener" | "removeEventListener"
 > {
   shouldYield: boolean;
   bump: () => void;

@@ -43,6 +43,7 @@ test("dynamic ordinary calls keep a deadline boundary and evaluate calls conditi
   let expired = true;
   const signal = {
     aborted: false, throwIfAborted() {},
+    addEventListener() {}, removeEventListener() {},
     get shouldYield() { return expired; },
     bump() { expired = false; events.push("yielded"); },
   };

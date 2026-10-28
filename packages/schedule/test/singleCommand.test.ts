@@ -54,6 +54,8 @@ test("command yields before entering its child when the deadline expires", async
   const signal = {
     aborted: false,
     throwIfAborted() {},
+    addEventListener() {},
+    removeEventListener() {},
     get shouldYield() { return expired; },
     bump() { expired = false; bumps++; },
   };

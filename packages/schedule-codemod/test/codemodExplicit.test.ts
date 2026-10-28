@@ -52,6 +52,7 @@ export function work(fn) { return child(fn); }`, {
   let expired = true;
   const signal = {
     aborted: false, throwIfAborted() {},
+    addEventListener() {}, removeEventListener() {},
     get shouldYield() { return expired; },
     bump() { expired = false; events.push("yield"); },
   };
@@ -108,6 +109,7 @@ test("explicit functions keep manual checkpoints and execute their calls synchro
   let expired = true;
   const signal = {
     aborted: false, throwIfAborted() {},
+    addEventListener() {}, removeEventListener() {},
     get shouldYield() { return expired; },
     bump() { expired = false; events.push("yield"); },
   };
