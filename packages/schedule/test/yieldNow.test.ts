@@ -11,7 +11,7 @@ test("yieldNow pauses scheduled execution", async () => {
     return 42;
   });
 
-  const pending = async(work, { startImmediately: true })();
+  const pending = async(work.schedulable(), { startImmediately: true });
   assert.equal(finished, false);
   assert.equal(await pending, 42);
   assert.equal(finished, true);

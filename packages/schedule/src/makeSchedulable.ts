@@ -28,14 +28,10 @@ export function makeSchedulable<
 /* Overload for manual specification of the different shapes, in case a method uses generics and/or overloads */
 export function makeSchedulable<
   FullSignature extends SchedulableMarker<
-    (...args: any[]) => SchedulableIterable<unknown>,
-    (...args: any[]) => unknown,
-    (...args: any[]) => Promise<unknown>
-  >,
+    (...args: any[]) => SchedulableIterable<unknown>
+  > & ((...args: any[]) => unknown),
 >(
-  schedulableImplementation: FullSignature extends FullSignature[typeof schedulableImplementationSymbol]["syncSignature"]
-    ? FullSignature[typeof schedulableImplementationSymbol]
-    : never,
+  schedulableImplementation: FullSignature["schedulable"],
 ): FullSignature;
 
 export function makeSchedulable<
@@ -57,8 +53,8 @@ export function makeSchedulable<
 
   const result = Object.assign(schedulable[name]!, {
     [schedulableImplementationSymbol]: schedulableImplementation,
-    command: execute(schedulable[name]!),
+    schedulable: execute(schedulable[name]!),
   });
-  Object.defineProperty(result, "command", { enumerable: false });
+  Object.defineProperty(result, "schedulable", { enumerable: false });
   return result;
 }

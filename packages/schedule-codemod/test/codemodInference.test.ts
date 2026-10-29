@@ -68,7 +68,7 @@ export function shadowed(String: (value: unknown) => string, value: unknown): st
     return Boolean(value);
   });
   assert.equal(run(fn, 1), true);
-  assert.equal(await scheduled(run)(fn, 0), false);
+  assert.equal(await scheduled(run.schedulable(fn, 0)), false);
 });
 
 test("a guarded callback stays schedulable while the synchronous branch stays direct", async t => {
@@ -113,13 +113,13 @@ export function run(fn: (this: { value: number }) => number, receiver: { value: 
     return this.value;
   });
   let finished = false;
-  const pending = scheduled(run, { signal })(callback, { value: 42 }).then((value: unknown) => { finished = true; return value; });
+  const pending = scheduled(run.schedulable(callback, { value: 42 }), { signal }).then((value: unknown) => { finished = true; return value; });
   await Promise.resolve();
   assert.equal(finished, false);
   assert.equal(await pending, 42);
   function plain(this: { value: number }) { return this.value; }
   assert.equal(run(plain, { value: 7 }), 7);
-  assert.equal(await scheduled(run)(plain, { value: 8 }), 8);
+  assert.equal(await scheduled(run.schedulable(plain, { value: 8 })), 8);
 });
 
 test("inferred return types survive direct and mutual recursion", async t => {
@@ -150,8 +150,8 @@ export function mutualB(n: number) {
   const generated = join(output, "input.ts");
   const text = await readFile(generated, "utf8");
   assert.match(text, /_SchedulableIterable<void>/);
-  assert.match(text, /yield\* recurse.command\(n - 1\)/);
-  assert.match(text, /yield\* mutualB.command\(n - 1\)/);
+  assert.match(text, /yield\* recurse.schedulable\(n - 1\)/);
+  assert.match(text, /yield\* mutualB.schedulable\(n - 1\)/);
   const result = spawnSync(join(root, "node_modules/.bin/tsc"), [
     "--ignoreConfig", "--strict", "--noEmit", "--target", "esnext", "--module", "nodenext",
     "--allowImportingTsExtensions", generated,
@@ -229,21 +229,21 @@ export function unionUnknown(worker: Worker | { run(value: number): number }): n
     exclude: [{ file: "caller.ts", name: "getBuiltinModule" }],
     runtimeModule: join(root, "packages/schedule/src/index.ts") });
   const text = await readFile(join(output, "caller.ts"), "utf8");
-  assert.match(text, /yield\* renamed.command\(1\)/);
-  assert.match(text, /yield\* produced.command\(value\)/);
+  assert.match(text, /yield\* renamed.schedulable\(1\)/);
+  assert.match(text, /yield\* produced.schedulable\(value\)/);
   assert.doesNotMatch(text, /_commands.execute\(produced\)/);
   assert.match(text, /_commands.execute\(hidden\)/);
   assert.match(text, /_commands.execute\(mixed\)/);
   assert.match(text, /plain\(2\)/);
-  assert.doesNotMatch(text, /_commands.execute\(plain\)|plain.command/);
+  assert.doesNotMatch(text, /_commands.execute\(plain\)|plain.schedulable/);
   assert.match(text, /_commands.execute\(callback\)\(3\)/);
-  assert.match(text, /worker.run.command.bind\(worker\)\(4\)/);
-  assert.match(text, /arrow.command\(5\)/);
+  assert.match(text, /worker.run.schedulable.bind\(worker\)\(4\)/);
+  assert.match(text, /arrow.schedulable\(5\)/);
   assert.match(text, /chain2\(6\)/);
   assert.match(text, /worker.plain\(7\)/);
   const callee = await readFile(join(output, "callee.ts"), "utf8");
   assert.match(callee, /export function chain2\(value: number\): number \{ return chain\(value\); \}/);
-  assert.match(text, /unionScheduled[^]*?worker.run.command.bind\(worker\)\(1\)/);
+  assert.match(text, /unionScheduled[^]*?worker.run.schedulable.bind\(worker\)\(1\)/);
   assert.match(text, /export function unionPlain[^]*?return worker.plain\(1\);/);
   assert.match(text, /unionMixed[^]*?_callee\d* = worker.run[^]*?_commands.execute\(_callee\d*\).bind\(worker\)\(1\)/);
   assert.match(text, /unionUnknown[^]*?_callee\d* = worker.run[^]*?_commands.execute\(_callee\d*\).bind\(worker\)\(1\)/);
@@ -256,5 +256,5 @@ export function unionUnknown(worker: Worker | { run(value: number): number }): n
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const module = await import(pathToFileURL(join(output, "caller.ts")).href);
   assert.equal(module.runFactory(3), 4);
-  assert.equal(await scheduled(module.runFactory)(3), 4);
+  assert.equal(await scheduled(module.runFactory.schedulable(3)), 4);
 });

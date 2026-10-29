@@ -19,8 +19,8 @@ const add = makeSchedulable<SchedulableMethod<(this: Receiver, amount: number) =
 );
 const receiver: Receiver = { total: 1 };
 expectTypeOf(add.call(receiver, 2)).toEqualTypeOf<number>();
-expectTypeOf(sync(add).bind(receiver)(2)).toEqualTypeOf<number>();
-expectTypeOf(async(add).bind(receiver)(2)).toEqualTypeOf<Promise<number>>();
+expectTypeOf(sync(add.schedulable.bind(receiver)(2))).toEqualTypeOf<number>();
+expectTypeOf(async(add.schedulable.bind(receiver)(2))).toEqualTypeOf<Promise<number>>();
 expectTypeOf(commands.execute(add).bind(receiver)(2)).toEqualTypeOf<SchedulableIterable<number>>();
 // @ts-expect-error Method bivariance does not permit invalid arguments.
 add.call(receiver, "wrong");

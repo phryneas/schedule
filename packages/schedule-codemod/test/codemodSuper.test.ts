@@ -42,9 +42,9 @@ test("super calls select the superclass method and preserve the current receiver
   const module = await import(pathToFileURL(file).href);
   const instance = new module.Derived();
   assert.equal(instance.add(3), 104);
-  assert.equal(await scheduled(instance.add).bind(instance)(3), 104);
+  assert.equal(await scheduled(instance.add.schedulable.bind(instance)(3)), 104);
   assert.equal(module.Derived.add(3), 205);
-  assert.equal(await scheduled(module.Derived.add).bind(module.Derived)(3), 205);
+  assert.equal(await scheduled(module.Derived.add.schedulable.bind(module.Derived)(3)), 205);
 
   // A yielding base method must run in the caller's scheduler, not a nested sync run.
   let yielded = false;
@@ -62,6 +62,6 @@ test("super calls select the superclass method and preserve the current receiver
     assert.equal(baseSignal, signal);
     return result;
   });
-  assert.equal(await scheduled(run)(), 104);
+  assert.equal(await scheduled(run.schedulable()), 104);
   assert.equal(yielded, true);
 });

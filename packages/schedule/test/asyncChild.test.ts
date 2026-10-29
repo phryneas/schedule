@@ -9,9 +9,9 @@ test("immediate children return values and preserve receivers", async () => {
     return this.value + amount;
   });
   const parent = makeSchedulable(function* () {
-    return yield* child.command.call(receiver, 3);
+    return yield* child.schedulable.call(receiver, 3);
   });
-  assert.equal(await async(parent)(), 7);
+  assert.equal(await async(parent.schedulable()), 7);
 });
 
 test("a child's first command is processed exactly once with the shared signal", async () => {
@@ -24,9 +24,9 @@ test("a child's first command is processed exactly once with the shared signal",
   });
   const parent = makeSchedulable(function* () {
     const signal = yield* commands.getSignal;
-    assert.equal(yield* child.command(), signal);
+    assert.equal(yield* child.schedulable(), signal);
   });
-  await async(parent)();
+  await async(parent.schedulable());
   assert.equal(calls, 1);
 });
 
@@ -43,11 +43,11 @@ test("immediate children preserve promises without reading then getters", async 
   });
   const parent = makeSchedulable(function* () {
     const promise = Promise.resolve(42);
-    assert.equal(yield* child.command(promise), promise);
-    assert.equal(yield* child.command(object), object);
+    assert.equal(yield* child.schedulable(promise), promise);
+    assert.equal(yield* child.schedulable(object), object);
     assert.equal(reads, 0);
   });
-  await async(parent)();
+  await async(parent.schedulable());
 });
 
 test("child throws reach parent catch and finally", async () => {
@@ -60,7 +60,7 @@ test("child throws reach parent catch and finally", async () => {
     });
     const parent = makeSchedulable(function* () {
       try {
-        yield* child.command();
+        yield* child.schedulable();
         assert.fail("expected child failure");
       } catch (caught) {
         assert.equal(caught, error);
@@ -68,7 +68,7 @@ test("child throws reach parent catch and finally", async () => {
         finalized = true;
       }
     });
-    await async(parent)();
+    await async(parent.schedulable());
     assert.equal(finalized, true);
   }
 });
@@ -81,10 +81,10 @@ test("non-immediate primitive results resume the parent without awaiting", async
     return 42;
   });
   const parent = makeSchedulable(function* () {
-    assert.equal(yield* child.command(), 42);
+    assert.equal(yield* child.schedulable(), 42);
     events.push("parent");
   });
-  await async(parent)();
+  await async(parent.schedulable());
   assert.deepEqual(events, ["parent", "microtask"]);
 });
 
@@ -98,13 +98,13 @@ test("non-immediate child failures reach the parent without awaiting", async () 
   });
   const parent = makeSchedulable(function* () {
     try {
-      yield* child.command();
+      yield* child.schedulable();
     } catch (caught) {
       assert.equal(caught, error);
       events.push("parent");
     }
   });
-  await async(parent)();
+  await async(parent.schedulable());
   assert.deepEqual(events, ["parent", "microtask"]);
 });
 
@@ -115,7 +115,7 @@ test("nested errors unwind through yielding finally blocks", async () => {
     try {
       yield* commands.getSignal;
       if (depth === 0) throw error;
-      yield* child.command(depth - 1);
+      yield* child.schedulable(depth - 1);
     } finally {
       yield* commands.yieldNow;
       events.push(depth);
@@ -123,13 +123,13 @@ test("nested errors unwind through yielding finally blocks", async () => {
   });
   const parent = makeSchedulable(function* () {
     try {
-      yield* child.command(3);
+      yield* child.schedulable(3);
     } catch (caught) {
       assert.equal(caught, error);
       events.push(4);
     }
   });
-  await async(parent)();
+  await async(parent.schedulable());
   assert.deepEqual(events, [0, 1, 2, 3, 4]);
 });
 
@@ -146,18 +146,18 @@ test("non-immediate children do not read a returned object's then getter", async
     return value;
   });
   const parent = makeSchedulable(function* () {
-    assert.equal(yield* child.command(), value);
+    assert.equal(yield* child.schedulable(), value);
     assert.equal(reads, 0);
   });
-  await async(parent)();
+  await async(parent.schedulable());
 });
 
 test("deep scheduled child calls do not exhaust the JavaScript call stack", async () => {
   const child = makeSchedulable(function* (depth: number): SchedulableIterable<number> {
     if (depth === 0) return 0;
-    return 1 + (yield* child.command(depth - 1));
+    return 1 + (yield* child.schedulable(depth - 1));
   });
-  assert.equal(await async(child)(10_000), 10_000);
+  assert.equal(await async(child.schedulable(10_000)), 10_000);
 });
 
 for (const immediate of [true, false]) {
@@ -170,7 +170,7 @@ for (const immediate of [true, false]) {
     let finished = false;
     const parent = makeSchedulable(function* () {
       for (const value of values) {
-        assert.equal(yield* child.command(value), value);
+        assert.equal(yield* child.schedulable(value), value);
       }
       finished = true;
     });
@@ -182,7 +182,7 @@ for (const immediate of [true, false]) {
       removeEventListener() {},
       bump() {},
     };
-    const pending = async(parent, { signal, startImmediately: true })();
+    const pending = async(parent.schedulable(), { signal, startImmediately: true });
     assert.equal(finished, true);
     await pending;
 
@@ -200,11 +200,11 @@ for (const immediate of [true, false]) {
       get then(): never { throw error; },
     };
     const preserve = makeSchedulable(function* () {
-      assert.equal(yield* child.command(thenable), thenable);
-      assert.equal(yield* child.command(callableThenable), callableThenable);
-      assert.equal(yield* child.command(throwing), throwing);
+      assert.equal(yield* child.schedulable(thenable), thenable);
+      assert.equal(yield* child.schedulable(callableThenable), callableThenable);
+      assert.equal(yield* child.schedulable(throwing), throwing);
     });
-    await async(preserve, { signal })();
+    await async(preserve.schedulable(), { signal });
   });
 
   test(`${immediate ? "immediate" : "non-immediate"} child promises allow sibling calls to run`, async () => {
@@ -222,9 +222,9 @@ for (const immediate of [true, false]) {
       return 17;
     });
     const parent = makeSchedulable(function* () {
-      const firstResult = yield* first.command();
+      const firstResult = yield* first.schedulable();
       assert.equal(firstResult, promise);
-      const secondResult = yield* second.command();
+      const secondResult = yield* second.schedulable();
       return Promise.all([firstResult, secondResult]);
     });
     const signal = {
@@ -235,7 +235,7 @@ for (const immediate of [true, false]) {
       removeEventListener() {},
       bump() {},
     };
-    const pending = async(parent, { signal, startImmediately: true })();
+    const pending = async(parent.schedulable(), { signal, startImmediately: true });
     try {
       assert.deepEqual(events, ["first", "second"]);
       assert.deepEqual(await pending, [42, 17]);
@@ -255,7 +255,7 @@ for (const immediate of [true, false]) {
     const parent = makeSchedulable(function* () {
       let result: Promise<number>;
       try {
-        result = yield* child.command();
+        result = yield* child.schedulable();
       } catch {
         assert.fail("returning a rejection must not throw into the caller");
       }
@@ -264,11 +264,11 @@ for (const immediate of [true, false]) {
         return 42;
       });
     });
-    assert.equal(await async(parent)(), 42);
+    assert.equal(await async(parent.schedulable()), 42);
 
     const propagate = makeSchedulable(function* () {
-      return yield* child.command();
+      return yield* child.schedulable();
     });
-    await assert.rejects(async(propagate)(), (caught) => caught === error);
+    await assert.rejects(async(propagate.schedulable()), (caught) => caught === error);
   });
 }

@@ -18,10 +18,10 @@ test("getSignal preserves the supplied signal across repeated acquisitions", asy
     return first;
   });
   assert.equal(work().aborted, false);
-  assert.equal(await async(work, { signal })(), signal);
+  assert.equal(await async(work.schedulable(), { signal }), signal);
   const controller = new AbortController();
   controller.abort();
-  await assert.rejects(async(work, { signal: controller.signal })(), { name: "AbortError" });
+  await assert.rejects(async(work.schedulable(), { signal: controller.signal }), { name: "AbortError" });
 });
 
 test("getSignal creates a command", () => {
@@ -33,7 +33,7 @@ test("getSignal forwards abort event subscriptions to the supplied AbortSignal",
   const work = makeSchedulable(function* () {
     return yield* getSignal;
   });
-  const signal = await async(work, { signal: controller.signal })();
+  const signal = await async(work.schedulable(), { signal: controller.signal });
   let calls = 0;
   const listener = () => { calls++; };
   const removed = () => assert.fail("removed listener must not run");
@@ -51,7 +51,7 @@ test("getSignal works inside sync and async scheduler execution", async () => {
   });
 
   assert.equal(work(), false);
-  assert.equal(await async(work)(), false);
+  assert.equal(await async(work.schedulable()), false);
 });
 
 test("async syncAware callbacks use a signal captured by the generator", async () => {
@@ -72,7 +72,7 @@ test("async syncAware callbacks use a signal captured by the generator", async (
   });
 
   work();
-  const pending = async(work, { signal: controller.signal })();
+  const pending = async(work.schedulable(), { signal: controller.signal });
   await assert.rejects(pending, { name: "AbortError" });
 });
 
@@ -82,5 +82,5 @@ test("requesting a signal rejects an already aborted run", async () => {
   const work = makeSchedulable(function* () {
     return yield* getSignal;
   });
-  await assert.rejects(async(work, { signal: controller.signal })(), { name: "AbortError" });
+  await assert.rejects(async(work.schedulable(), { signal: controller.signal }), { name: "AbortError" });
 });

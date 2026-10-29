@@ -1,42 +1,31 @@
-import { schedulableImplementationSymbol } from "./internal.ts";
+import { getSchedulableImplementation } from "./internal.ts";
 import { isSchedulableFunction } from "./isSchedulableFunction.ts";
 import type { Command } from "./commands.ts";
 import type {
   SchedulableIterable,
-  SchedulableMarker,
   ScheduleSignal,
 } from "./types.ts";
 
-export function async<
-  Fn extends SchedulableMarker<(...args: any[]) => any, any, any>,
->(
-  fn: Fn,
-  {
-    signal,
-    startImmediately,
-  }: {
-    signal?: AbortSignal | ScheduleSignal;
-    startImmediately?: boolean;
-  } = {},
-): NonNullable<Fn[typeof schedulableImplementationSymbol]["asyncSignature"]> {
-  return async function (this: any) {
-    if (!startImmediately) {
-      await new Promise<void>(schedule);
-    }
-
-    signal?.throwIfAborted();
-
-    return executeIterableAsync(
-      fn[schedulableImplementationSymbol].apply(this, arguments as any),
-      signal,
-    );
-  };
+interface AsyncOptions {
+  signal?: AbortSignal | ScheduleSignal;
+  startImmediately?: boolean;
 }
 
-async function executeIterableAsync(
-  iterable: SchedulableIterable<unknown>,
+export async function async<T>(
+  iterable: SchedulableIterable<T>,
+  { signal, startImmediately }: AsyncOptions = {},
+): Promise<Awaited<T>> {
+  if (!startImmediately) {
+    await new Promise<void>(schedule);
+  }
+  signal?.throwIfAborted();
+  return executeIterableAsync(iterable, signal);
+}
+
+async function executeIterableAsync<T>(
+  iterable: SchedulableIterable<T>,
   abortSignal?: AbortSignal | ScheduleSignal,
-): Promise<unknown> {
+): Promise<Awaited<T>> {
   let scheduleSignal: ScheduleSignal;
   if (abortSignal && "shouldYield" in abortSignal) {
     scheduleSignal = abortSignal;
@@ -64,7 +53,7 @@ async function executeIterableAsync(
   }
 
   const parents: SchedulableIterable<unknown>[] = [];
-  let iterator = iterable[Symbol.iterator]();
+  let iterator: SchedulableIterable<unknown> = iterable[Symbol.iterator]();
   let initialResult: IteratorResult<Command, unknown> | undefined;
   let nextArg: unknown;
   let throwing = false;
@@ -90,7 +79,7 @@ async function executeIterableAsync(
     nextArg = undefined;
     if (result.done) {
       const parent = parents.pop();
-      if (!parent) return result.value;
+      if (!parent) return result.value as Awaited<T>;
       iterator = parent;
       // Returning a promise is distinct from explicitly awaiting a syncAware command.
       nextArg = result.value;
@@ -118,7 +107,7 @@ async function executeIterableAsync(
             scheduleSignal.bump();
           }
           if (isSchedulableFunction(fn)) {
-            const child = fn[schedulableImplementationSymbol]
+            const child = getSchedulableImplementation(fn)
               .apply(thisArg, args)
               [Symbol.iterator]();
             const first = child.next();

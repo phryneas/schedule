@@ -27,9 +27,12 @@ test("syncAware wrappers reuse arguments and receivers independently in both sch
     return [yield* add.call(first, value), yield* add.bind(second)(value + 1)];
   });
   assert.deepEqual(work(1), [11, 22]);
-  assert.deepEqual(await Promise.all([async(work)(2), async(work)(3)]), [[12, 23], [13, 24]]);
+  assert.deepEqual(await Promise.all([async(work.schedulable(2)), async(work.schedulable(3))]), [[12, 23], [13, 24]]);
   assert.deepEqual(calls, ["sync", "sync", "async", "async", "async", "async"]);
-  assert.equal(add.call(first, 1).next().value.startImmediately, true);
+  const result = add.call(first, 1).next();
+  assert.equal(result.done, false);
+  assert.equal(result.value.kind, "syncAware");
+  assert.equal(result.value.startImmediately, true);
 });
 
 test("syncAware reads a file and sums its lines in both modes", async () => {
@@ -56,5 +59,5 @@ test("syncAware reads a file and sums its lines in both modes", async () => {
 
   const directory = fileURLToPath(new URL("./fixtures/", import.meta.url));
   assert.equal(sumFile(directory, "numbers.txt"), 6);
-  assert.equal(await async(sumFile)(directory, "numbers.txt"), 6);
+  assert.equal(await async(sumFile.schedulable(directory, "numbers.txt")), 6);
 });

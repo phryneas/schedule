@@ -23,11 +23,11 @@ const sum = makeSchedulable(function* (
 
 test("sum runs synchronously", () => {
   assert.equal(sum([1, 2, 3]), 6);
-  assert.equal(sync(sum)([1, 2, 3]), 6);
+  assert.equal(sync(sum.schedulable([1, 2, 3])), 6);
 });
 
 test("sum runs with the scheduler", async () => {
-  assert.equal(await async(sum)([1, 2, 3]), 6);
+  assert.equal(await async(sum.schedulable([1, 2, 3])), 6);
 });
 
 test("sync and async forward arguments and this", async () => {
@@ -37,6 +37,6 @@ test("sync and async forward arguments and this", async () => {
   ): SchedulableIterable<number> {
     return this.offset + value;
   });
-  assert.equal(sync(add).call({ offset: 10 }, 2), 12);
-  assert.equal(await async(add).call({ offset: 10 }, 2), 12);
+  assert.equal(sync(add.schedulable.call({ offset: 10 }, 2)), 12);
+  assert.equal(await async(add.schedulable.call({ offset: 10 }, 2)), 12);
 });

@@ -11,14 +11,14 @@ test("short scheduled children share the parent's deadline", async (t) => {
   });
   const parent = makeSchedulable(function* (): SchedulableIterable<void> {
     const signal = yield* commands.getSignal;
-    yield* child.command();
+    yield* child.schedulable();
     assert.equal(signal.shouldYield, false);
-    yield* child.command();
+    yield* child.schedulable();
     assert.equal(signal.shouldYield, true);
     // The next command must yield before entering the callback.
     yield* commands.execute(() => assert.equal(signal.shouldYield, false))();
   });
-  await async(parent)();
+  await async(parent.schedulable());
 });
 
 test("an already resolved syncAware promise does not reset the deadline", async (t) => {
@@ -34,7 +34,7 @@ test("an already resolved syncAware promise does not reset the deadline", async 
     yield* commands.yieldNow;
     assert.equal(signal.shouldYield, false);
   });
-  await async(work)();
+  await async(work.schedulable());
 });
 
 test("returning from a child preserves time spent since its last actual yield", async (t) => {
@@ -47,8 +47,8 @@ test("returning from a child preserves time spent since its last actual yield", 
   });
   const parent = makeSchedulable(function* (): SchedulableIterable<void> {
     const signal = yield* commands.getSignal;
-    yield* child.command();
+    yield* child.schedulable();
     assert.equal(signal.shouldYield, true);
   });
-  await async(parent)();
+  await async(parent.schedulable());
 });

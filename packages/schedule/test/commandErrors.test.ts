@@ -22,7 +22,7 @@ for (const scheduler of [sync, async]) {
           events.push("finally");
         }
       });
-      assert.equal(await scheduler(run)(), 42);
+      assert.equal(await scheduler(run.schedulable()), 42);
       assert.deepEqual(events, ["catch", "finally"]);
     });
   }
@@ -40,6 +40,6 @@ for (const scheduler of [sync, async]) {
       }
       return "not caught";
     });
-    assert.equal(await scheduler(run)(), "caught");
+    assert.equal(await scheduler(run.schedulable()), "caught");
   });
 }

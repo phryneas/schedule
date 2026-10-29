@@ -47,21 +47,21 @@ test("dynamic ordinary calls keep a deadline boundary and evaluate calls conditi
     get shouldYield() { return expired; },
     bump() { expired = false; events.push("yielded"); },
   };
-  assert.equal(await scheduled(module.run, { signal })(object, argument, false), false);
+  assert.equal(await scheduled(commands.execute(module.run, true)(object, argument, false), { signal }), false);
   assert.deepEqual(events, []);
-  const pending = scheduled(module.run, { signal })(object, argument, true);
+  const pending = scheduled(commands.execute(module.run, true)(object, argument, true), { signal });
   assert.deepEqual(events, []);
   assert.equal(await pending, 10);
   assert.deepEqual(events, ["yielded", "get", "argument", "call"]);
 });
 
-test("dynamic calls accept ordinary functions with unrelated command properties", async () => {
+test("dynamic calls accept ordinary functions with unrelated schedulable properties", async () => {
   const module = await load(`export function run(callback) { return callback(3); }`);
   const callback = Object.assign((n: number) => n + 1, {
-    command() { assert.fail("not a schedulable implementation"); },
+    schedulable() { assert.fail("not a schedulable implementation"); },
   });
   assert.equal(module.run(callback), 4);
-  assert.equal(await scheduled(module.run)(callback), 4);
+  assert.equal(await scheduled(module.run.schedulable(callback)), 4);
 });
 
 test("plugin preserves function hoisting and schedules local calls", async () => {
@@ -74,7 +74,7 @@ test("plugin preserves function hoisting and schedules local calls", async () =>
   const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
   assert.equal(module.initial, 6);
   assert.equal(module.twice(4), 8);
-  assert.equal(await scheduled(module.twice)(4), 8);
+  assert.equal(await scheduled(module.twice.schedulable(4)), 8);
 });
 
 test("plugin preserves method receivers and evaluates receiver expressions once", async () => {
@@ -92,7 +92,7 @@ test("plugin preserves method receivers and evaluates receiver expressions once"
     }
   `);
   assert.deepEqual(module.run(new module.Counter()), [5, 1]);
-  assert.deepEqual(await scheduled(module.run)(new module.Counter()), [5, 1]);
+  assert.deepEqual(await scheduled(module.run.schedulable(new module.Counter())), [5, 1]);
   assert.equal(new module.Counter().current, 2);
   assert.equal(Object.hasOwn(new module.Counter(), "run"), false);
 });
@@ -107,7 +107,7 @@ test("hoisting fallback preserves early captures and indirect initialization cal
   `);
   assert.equal(module.captured, module.work);
   assert.equal(module.initial, 3);
-  assert.equal(await scheduled(module.captured)(4), 4);
+  assert.equal(await scheduled(module.captured.schedulable(4)), 4);
 });
 
 test("class installations precede existing static initialization", async () => {
@@ -153,7 +153,7 @@ test("receiver temporaries avoid existing names and nested-scope references", as
   `);
   const getObject = () => ({ value: 7, read() { return this.value; } });
   assert.deepEqual(module.run(getObject), [7, 33, 11, 22]);
-  assert.deepEqual(await scheduled(module.run)(getObject), [7, 33, 11, 22]);
+  assert.deepEqual(await scheduled(module.run.schedulable(getObject)), [7, 33, 11, 22]);
 });
 
 test("stable receivers bind directly while getter-mutated bindings keep their receiver", async () => {
@@ -179,7 +179,7 @@ test("stable receivers bind directly while getter-mutated bindings keep their re
     }
   `);
   assert.equal(module.run(), 7);
-  assert.equal(await scheduled(module.run)(), 7);
+  assert.equal(await scheduled(module.run.schedulable()), 7);
 });
 
 test("optional methods preserve receivers, getter evaluation, and conditional arguments", async () => {
@@ -194,7 +194,7 @@ test("optional methods preserve receivers, getter evaluation, and conditional ar
       return queue.shift()?.(argument());
     }
   `);
-  for (const run of [module.run, scheduled(module.run), module.optionalReceiver, scheduled(module.optionalReceiver)]) {
+  for (const run of [module.run, (...args: unknown[]) => scheduled(module.run.schedulable(...args)), module.optionalReceiver, (...args: unknown[]) => scheduled(module.optionalReceiver.schedulable(...args))]) {
     for (const present of [false, true]) {
       const events: string[] = [];
       const receiver = {
@@ -220,8 +220,8 @@ test("optional methods preserve receivers, getter evaluation, and conditional ar
   }
   const unexpected = () => { throw new Error("must not evaluate"); };
   assert.equal(module.optionalReceiver(() => null, unexpected, unexpected), undefined);
-  assert.equal(await scheduled(module.optionalReceiver)(() => undefined, unexpected, unexpected), undefined);
-  for (const run of [module.returnedCallback, scheduled(module.returnedCallback)]) {
+  assert.equal(await scheduled(module.optionalReceiver.schedulable(() => undefined, unexpected, unexpected)), undefined);
+  for (const run of [module.returnedCallback, (...args: unknown[]) => scheduled(module.returnedCallback.schedulable(...args))]) {
     const queue = [makeSchedulable(function* (this: unknown, value: number) {
       assert.equal(this, undefined);
       yield* commands.yieldNow;
@@ -257,7 +257,7 @@ test("receiver assignments stay conditional and preserve nested argument evaluat
     for (const enabled of [false, true]) {
       const expected = await observe(original[name], enabled);
       assert.deepEqual(await observe(transformed[name], enabled), expected);
-      assert.deepEqual(await observe(scheduled(transformed[name]), enabled), expected);
+      assert.deepEqual(await observe((...args: unknown[]) => scheduled(transformed[name].schedulable(...args)), enabled), expected);
     }
   }
 });
@@ -275,8 +275,8 @@ test("receiver temporaries are isolated across recursive and concurrent executio
   const receiver = (value: number) => ({ value, add });
   assert.equal(module.recurse(receiver, 4), 10);
   assert.deepEqual(await Promise.all([
-    scheduled(module.recurse)(receiver, 4),
-    scheduled(module.recurse)(receiver, 7),
+    scheduled(module.recurse.schedulable(receiver, 4)),
+    scheduled(module.recurse.schedulable(receiver, 7)),
   ]), [10, 28]);
 });
 
@@ -310,18 +310,18 @@ test("GraphQL.js 16.14.2 transforms and runs through its public API", async (t) 
   const query = "query Test($id: ID!) { user(id: $id) { id name } }";
   const original = graphql.parse(query, { noLocation: true });
   assert.deepEqual(transformed.parse(query, { noLocation: true }), original);
-  assert.deepEqual(await scheduled(transformed.parse)(query, { noLocation: true }), original);
+  assert.deepEqual(await scheduled(transformed.parse.schedulable(query, { noLocation: true })), original);
   assert.equal(transformed.print(original), graphql.print(original));
   const names: string[] = [];
-  await scheduled(transformed.visit)(original, { Name(node: any) { names.push(node.value); } });
+  await scheduled(transformed.visit.schedulable(original, { Name(node: any) { names.push(node.value); } }));
   assert.ok(names.includes("user"));
   const schema = transformed.buildSchema("type Query { hello: String }");
   assert.deepEqual(transformed.validate(schema, transformed.parse("{ hello }")), []);
-  assert.deepEqual(await scheduled(transformed.validate)(schema, transformed.parse("{ hello }")), []);
+  assert.deepEqual(await scheduled(transformed.validate.schedulable(schema, transformed.parse("{ hello }"))), []);
   assert.deepEqual(await transformed.graphql({ schema, source: "{ hello }", rootValue: { hello: "world" } }), {
     data: Object.assign(Object.create(null), { hello: "world" }),
   });
-  await assert.rejects(scheduled(transformed.parse)("{ invalid"), /Syntax Error/);
+  await assert.rejects(scheduled(transformed.parse.schedulable("{ invalid")), /Syntax Error/);
 
   // A supplied schedulable visitor must be executed through the same runner.
   let visited = false;
@@ -329,6 +329,6 @@ test("GraphQL.js 16.14.2 transforms and runs through its public API", async (t) 
     yield* commands.yieldNow;
     visited = true;
   });
-  await scheduled(transformed.visit)(original, { Document: visitor });
+  await scheduled(transformed.visit.schedulable(original, { Document: visitor }));
   assert.equal(visited, true);
 });

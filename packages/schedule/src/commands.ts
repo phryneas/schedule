@@ -3,7 +3,6 @@ import type {
   SchedulableMarker,
   ScheduleSignal,
 } from "./types.ts";
-import type { schedulableImplementationSymbol } from "./internal.ts";
 import { SingleCommand } from "./singleCommand.ts";
 import { ReusableCommand } from "./reusableCommand.ts";
 import type {
@@ -46,19 +45,15 @@ export function execute<Fn extends (...args: any[]) => unknown>(
   fn: HasMultipleSignatures<Fn> extends true
     ? Fn
     : Fn extends SchedulableMarker<
-          (...args: any[]) => SchedulableIterable<unknown>,
-          any,
-          any
+          (...args: any[]) => SchedulableIterable<unknown>
         >
       ? Fn
       : never,
   startImmediately?: boolean,
 ): Fn extends SchedulableMarker<
-  (...args: any[]) => SchedulableIterable<unknown>,
-  any,
-  any
+  (...args: any[]) => SchedulableIterable<unknown>
 >
-  ? Fn[typeof schedulableImplementationSymbol]
+  ? Fn["schedulable"]
   : MapResults<Fn, ToSchedulable>;
 export function execute<Ret, Args extends Array<unknown>, ThisArg>(
   fn: (this: ThisArg, ...args: Args) => Ret,

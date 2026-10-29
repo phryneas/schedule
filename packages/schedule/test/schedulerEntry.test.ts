@@ -21,9 +21,9 @@ for (const options of [undefined, {}, { startImmediately: true }, { startImmedia
         return result;
       })();
     });
-    const run = async(work, options);
+    const iterable = work.schedulable.call({ base: 40 }, 2);
     assert.deepEqual(events, []);
-    const pending = run.call({ base: 40 }, 2);
+    const pending = async(iterable, options);
     const beforeYield = options?.startImmediately ? ["create", "run"] : [];
     assert.deepEqual(events, beforeYield);
     await Promise.resolve();
@@ -40,10 +40,10 @@ test("deferred entry observes cancellation before its first signal acquisition",
     yield* getSignal;
     finished = true;
   });
-  const pending = async(work, {
+  const pending = async(work.schedulable(), {
     signal: controller.signal,
     startImmediately: false,
-  })();
+  });
   controller.abort();
   await assert.rejects(pending, { name: "AbortError" });
   assert.equal(finished, false);
@@ -54,7 +54,7 @@ test("deferred entry rejects errors thrown while creating the iterable", async (
   const work = makeSchedulable(function (): SchedulableIterable<never> {
     throw error;
   });
-  const pending = async(work, { startImmediately: false })();
+  const pending = async(work.schedulable(), { startImmediately: false });
   await assert.rejects(pending, reason => reason === error);
 });
 
@@ -73,9 +73,9 @@ test("async rejects errors thrown while creating the iterable", async () => {
   });
 
   // Invoke before assert.rejects so a synchronous throw fails the test.
-  const parameterResult = async(defaultParameter, { startImmediately: true })();
+  const parameterResult = async(defaultParameter.schedulable(), { startImmediately: true });
   await assert.rejects(parameterResult, reason => reason === error);
-  const factoryResult = async(factory, { startImmediately: true })();
+  const factoryResult = async(factory.schedulable(), { startImmediately: true });
   await assert.rejects(factoryResult, reason => reason === undefined);
 });
 
@@ -92,13 +92,13 @@ test("nested scheduler calls do not change the outer signal", async () => {
     yield* execute(check)();
     yield* syncAware({
       sync: check,
-      async: async () => { assert.equal(await async(child)(), 42); },
+      async: async () => { assert.equal(await async(child.schedulable()), 42); },
     })();
     assert.equal(yield* getSignal, signal);
   });
 
   parent();
-  await async(parent)();
+  await async(parent.schedulable());
 });
 
 test("execute composition preserves safe generator execution in both modes", async () => {
@@ -115,5 +115,5 @@ test("execute composition preserves safe generator execution in both modes", asy
   });
 
   assert.equal(parent(), 42);
-  assert.equal(await async(parent)(), 42);
+  assert.equal(await async(parent.schedulable()), 42);
 });

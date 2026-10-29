@@ -20,7 +20,7 @@ test("execute supports dynamically narrowed ordinary and schedulable methods", a
   };
   for (const [value, expected] of [[ordinary, 13], [scheduled, 23]] as const) {
     assert.equal(serialize(value), expected);
-    assert.equal(await async(serialize)(value), expected);
+    assert.equal(await async(serialize.schedulable(value)), expected);
   }
 });
 
@@ -37,7 +37,7 @@ test("execute composes schedulable functions", async () => {
   });
 
   assert.equal(sumBatches([[1, 2], [3]]), 6);
-  assert.equal(await async(sumBatches)([[1, 2], [3]]), 6);
+  assert.equal(await async(sumBatches.schedulable([[1, 2], [3]])), 6);
 });
 
 test("execute forwards this and arguments to an ordinary function", async () => {
@@ -54,7 +54,7 @@ test("execute forwards this and arguments to an ordinary function", async () => 
   assert.equal(work(), 13);
   assert.equal(receiver.total, 13);
   receiver.total = 10;
-  assert.equal(await async(work)(), 13);
+  assert.equal(await async(work.schedulable()), 13);
   assert.equal(receiver.total, 13);
 });
 
@@ -77,6 +77,6 @@ test("execute forwards this and arguments to a schedulable function", async () =
   assert.equal(work(), 13);
   assert.equal(receiver.total, 13);
   receiver.total = 10;
-  assert.equal(await async(work)(), 13);
+  assert.equal(await async(work.schedulable()), 13);
   assert.equal(receiver.total, 13);
 });

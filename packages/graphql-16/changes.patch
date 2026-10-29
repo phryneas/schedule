@@ -54,6 +54,20 @@ index 74aca39c9da44939d63b508c50dda010ba49d221..92668490975eadba606d1ef62d132c19
 +
 +# Generated schedulable code.
 +/src
+diff --git a/.eslintrc.yml b/.eslintrc.yml
+index 5851852a3b71b7c4f95732325753219730ad63a5..104de5922409f2cd7162a3feaaacc3f8c0eb94d6 100644
+--- a/.eslintrc.yml
++++ b/.eslintrc.yml
+@@ -958,6 +958,9 @@ overrides:
+       node: true
+     rules:
+       internal-rules/only-ascii: [error, { allowEmoji: true }]
++      # Benchmark fixtures install their own dependencies at runtime.
++      import/no-extraneous-dependencies: off
++      node/no-extraneous-require: [error, { allowModules: ['graphql'] }]
+       node/no-sync: off
+       node/no-missing-require: off
+       import/no-nodejs-modules: off
 diff --git a/.node-version b/.node-version
 index 703a257b8b54f58ae090ead10f0813e938f47013..54c65116f15a6832459847f69931fe830411bbbc 100644
 --- a/.node-version
@@ -62,15 +76,16 @@ index 703a257b8b54f58ae090ead10f0813e938f47013..54c65116f15a6832459847f69931fe83
 -v17
 +v24
 diff --git a/benchmark/benchmark.js b/benchmark/benchmark.js
-index 9288d1f273827bf1bf57ee7709d025539689e72e..052d9cde6b6e90fc5cde097402dc0c36dba40839 100644
+index 9288d1f273827bf1bf57ee7709d025539689e72e..a231032016085afa2bdd59c5a3bf78959a0e3174 100644
 --- a/benchmark/benchmark.js
 +++ b/benchmark/benchmark.js
-@@ -59,7 +59,7 @@ function prepareBenchmarkProjects(revisionList) {
+@@ -59,7 +59,8 @@ function prepareBenchmarkProjects(revisionList) {
        '{ "private": true }',
      );
      exec(
 -      'npm --quiet install --ignore-scripts ' + prepareNPMPackage(revision),
-+      'npm --quiet install --ignore-scripts graphql@' + prepareNPMPackage(revision),
++      'npm --quiet install --ignore-scripts graphql@' +
++        prepareNPMPackage(revision),
        { cwd: projectPath },
      );
      exec(`cp -R ${localDir('benchmark')} ${projectPath}`);
@@ -85,34 +100,43 @@ index c220a7f6f15fd6cebdd63ac7c89833dc89c5459d..71ac5f335e24dc8293a764771450fe0c
 +  - phryneas
 +  - Schedulable
 diff --git a/integrationTests/ts/tsconfig.json b/integrationTests/ts/tsconfig.json
-index 403b4c213f91057a9fb93f52698c2ed8662c3a2d..e3800255cfce7884c31b863262c53d63d89c980a 100644
+index 403b4c213f91057a9fb93f52698c2ed8662c3a2d..66987c18b59284a78f4cb5b871966411d87a3598 100644
 --- a/integrationTests/ts/tsconfig.json
 +++ b/integrationTests/ts/tsconfig.json
-@@ -1,7 +1,8 @@
+@@ -1,7 +1,14 @@
  {
    "compilerOptions": {
 -    "module": "commonjs",
 -    "lib": ["es2019", "es2020.promise", "es2020.bigint", "es2020.string"],
 +    "module": "nodenext",
 +    "moduleResolution": "nodenext",
-+    "lib": ["es2019", "es2020.promise", "es2020.bigint", "es2020.string", "DOM"],
++    "lib": [
++      "es2019",
++      "es2020.promise",
++      "es2020.bigint",
++      "es2020.string",
++      "DOM"
++    ],
      "strict": true,
      "noEmit": true,
      "types": []
 diff --git a/resources/build-npm.js b/resources/build-npm.js
-index 7ff0cf079cd606701f8cb0c42d1564807d595b27..9099fe540510947b4d11eab6538aa177ad4f57e6 100644
+index 7ff0cf079cd606701f8cb0c42d1564807d595b27..dbdb05e543708e98672759e067883463f91b338b 100644
 --- a/resources/build-npm.js
 +++ b/resources/build-npm.js
-@@ -43,7 +43,7 @@ if (require.main === module) {
+@@ -43,7 +43,10 @@ if (require.main === module) {
      '"tsconfig.json" should have `compilerOptions`',
    );
    const tsOptions = {
 -    ...tsConfig.compilerOptions,
-+    ...ts.convertCompilerOptionsFromJson(tsConfig.compilerOptions, process.cwd()).options,
++    ...ts.convertCompilerOptionsFromJson(
++      tsConfig.compilerOptions,
++      process.cwd(),
++    ).options,
      noEmit: false,
      declaration: true,
      declarationDir: './npmDist',
-@@ -52,7 +52,7 @@ if (require.main === module) {
+@@ -52,7 +55,7 @@ if (require.main === module) {
  
    const tsHost = ts.createCompilerHost(tsOptions);
    tsHost.writeFile = (filepath, body) => {
