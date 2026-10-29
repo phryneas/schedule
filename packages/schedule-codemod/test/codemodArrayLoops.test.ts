@@ -61,14 +61,14 @@ export function lexical(this: { factor: number }, items: number[]) {
     return value * 2;
   });
   assert.deepEqual(module.map([1, 2, 3], double), [2, 4, 6]);
-  assert.deepEqual(await scheduled(module.map)([1, 2, 3], double), [2, 4, 6]);
+  assert.deepEqual(await scheduled(module.map.schedulable([1, 2, 3], double)), [2, 4, 6]);
   let calls = 0;
   const predicate = makeSchedulable(function* (value: number) {
     calls++;
     yield* commands.yieldNow;
     return value === 2;
   });
-  assert.equal(await scheduled(module.some)([1, 2, 3], predicate), true);
+  assert.equal(await scheduled(module.some.schedulable([1, 2, 3], predicate)), true);
   assert.equal(calls, 2);
   assert.equal(module.some([], () => true), false);
   let receivers = 0;

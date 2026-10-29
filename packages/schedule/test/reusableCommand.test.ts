@@ -60,7 +60,7 @@ test("overlapping asynchronous runs retain their own signals across yields", asy
     }
     return before;
   });
-  const results = await Promise.all(signals.map(signal => async(work, { signal })()));
+  const results = await Promise.all(signals.map(signal => async(work.schedulable(), { signal })));
   signals.forEach((signal, i) => {
     assert.equal(results[i], signal);
     assert.equal(signal.bumps, 3);
@@ -73,8 +73,8 @@ test("cancellation during getSignal does not poison later uses", async () => {
   });
   const controller = new AbortController();
   controller.abort();
-  await assert.rejects(async(work, { signal: controller.signal })());
-  assert.equal((await async(work)()).aborted, false);
+  await assert.rejects(async(work.schedulable(), { signal: controller.signal }));
+  assert.equal((await async(work.schedulable())).aborted, false);
 });
 
 test("closing or throwing into a delegated command does not affect another use", () => {

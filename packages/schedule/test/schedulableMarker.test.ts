@@ -35,9 +35,9 @@ test("declaration consumers retain the explicit symbol marker and generic callba
     import { async, commands } from "./src/index.js";
     import type { SchedulableIterable } from "./src/index.js";
     expectTypeOf([1, 2, 3].map(scheduled)).toEqualTypeOf<number[]>();
-    expectTypeOf(async(scheduled)(1)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(async(scheduled.schedulable(1))).toEqualTypeOf<Promise<number>>();
     expectTypeOf(commands.execute(scheduled)(1)).toEqualTypeOf<SchedulableIterable<number>>();
-    expectTypeOf(scheduled.command(1)).toEqualTypeOf<SchedulableIterable<number>>();
+    expectTypeOf(scheduled.schedulable(1)).toEqualTypeOf<SchedulableIterable<number>>();
   `);
   compile(["--ignoreConfig", "--noEmit", "--strict", "--target", "esnext", "--module", "nodenext", "--allowImportingTsExtensions", consumer]);
 });

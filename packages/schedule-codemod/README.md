@@ -128,4 +128,4 @@ make a long-running callback interruptible.
 Dynamic calls check the scheduling deadline before dispatch. Ordinary callbacks
 are called directly; callbacks with the `schedulableImplementationSymbol` marker go through
 `commands.execute`, which checks whether they are schedulable. Known ordinary
-and schedulable targets retain their direct and `.command` calls respectively.
+and schedulable targets retain their direct and `.schedulable` calls respectively.

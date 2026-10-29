@@ -59,6 +59,9 @@ the schedule dependency (for example, an absolute `file:` path for local work).
 The v16 fork retains its CJS/ESM output formats but uses Node 24+ and modern
 TypeScript/Babel tooling. It requires TypeScript 6.0+; its declaration tests use
 `nodenext` resolution. Generated declarations use TypeScript's own formatting.
+Its formatting check uses Prettier 3 for generated TypeScript and retains the
+upstream Prettier version for other files. Transformed coverage thresholds are
+97% lines, 96% branches, and 100% functions, allowing for generated dispatch code.
 
 At the lane's base release, edit `patched`, including the memoization adaptations and
 `// @phryneas/schedule may-yield-here` comments. Save those changes with:
@@ -89,6 +92,10 @@ Package files and build configuration are copied from `patched`;
 make other persistent edits there rather than in `transformed`. Dependencies and Git
 metadata are not copied. Install dependencies in `transformed` separately when
 building it, including `@phryneas/schedule` as required by its generated imports.
+Run `npm test --prefix packages/graphql-common/transformed` for the full upstream
+validation pipeline, including package integration tests. When testing a local
+scheduler in Docker, set `SCHEDULE_PACKAGE` to a `file:` tarball produced by
+`npm pack`, so the installed dependency does not link to a host-only directory.
 
 `orig`, `patched`, and `transformed` are ignored by Git. Keep `orig` clean: local
 uncommitted edits there are not copied into `patched`. To change upstream versions,

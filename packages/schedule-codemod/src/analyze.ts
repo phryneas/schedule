@@ -125,7 +125,7 @@ export function analyze(project: Project, source: SourceFile, root: string, excl
         return node && (isFunctionDeclaration(node) || isMethodDeclaration(node) || isFunctionExpression(node) || isArrowFunction(node))
           ? { file: node.getSourceFile().fileName, end: node.end } : undefined;
       });
-      const commandProperty = calleeType && checker.getPropertyOfType(calleeType, "command");
+      const commandProperty = calleeType && checker.getPropertyOfType(calleeType, "schedulable");
       const hasCommand = !!commandProperty && !(commandProperty.flags & SymbolFlags.Optional);
       result.calls.set(node.end, { direct, hasCommand, ...(targets.length && targets.every(target => !!target) ? { targets } : {}) });
     }

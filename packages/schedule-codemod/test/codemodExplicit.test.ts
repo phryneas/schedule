@@ -56,7 +56,7 @@ export function work(fn) { return child(fn); }`, {
     get shouldYield() { return expired; },
     bump() { expired = false; events.push("yield"); },
   };
-  assert.equal(await scheduled(work, { signal })(() => { events.push("call"); return 42; }), 42);
+  assert.equal(await scheduled(work.schedulable(() => { events.push("call"); return 42; }), { signal }), 42);
   assert.deepEqual(events, ["yield", "call"]);
 });
 
@@ -113,7 +113,7 @@ test("explicit functions keep manual checkpoints and execute their calls synchro
     get shouldYield() { return expired; },
     bump() { expired = false; events.push("yield"); },
   };
-  const result = await scheduled(work, { signal })((value: number) => { events.push("call"); return value + 1; });
+  const result = await scheduled(work.schedulable((value: number) => { events.push("call"); return value + 1; }), { signal });
   assert.equal(result, 4);
   assert.deepEqual(events, ["yield", "call"]);
   assert.match(output, /return fn\(3\)/);
@@ -129,7 +129,7 @@ export function child() {
 export function parent() { return child(); }`, "fixture.ts");
   assert.match(output, /yield\* _commands.yieldNow/);
   assert.match(output, /export function parent\(\) \{ return child\(\); \}/);
-  assert.doesNotMatch(output, /\.execute\(|\.command/);
+  assert.doesNotMatch(output, /\.execute\(|\.schedulable/);
 });
 
 test("file-scope explicit directives apply to the whole file", () => {

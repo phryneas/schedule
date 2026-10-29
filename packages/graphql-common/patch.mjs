@@ -47,6 +47,9 @@ if (major === 16) {
     "engines.node=^24.0.0 || ^25.0.0 || >=26.0.0",
     "devDependencies.typescript=^6.0.3",
     "devDependencies.@types/node=^24.0.0",
+    "devDependencies.prettier-typescript=npm:prettier@3.8.1",
+    "scripts.prettier=node node_modules/prettier/bin-prettier.js --write --list-different . '!src/**' && node node_modules/prettier-typescript/bin/prettier.cjs --write --list-different src",
+    "scripts.prettier:check=node node_modules/prettier/bin-prettier.js --check . '!src/**' && node node_modules/prettier-typescript/bin/prettier.cjs --check src",
     ...["@babel/core", "@babel/plugin-syntax-typescript", "@babel/plugin-transform-typescript",
       "@babel/preset-env", "@babel/register"].map(name => `devDependencies.${name}=^7.28.0`),
     "scripts.check:integrations=npm run build:npm && mocha --full-trace integrationTests/*-test.js",
@@ -58,7 +61,9 @@ if (manifest.scripts?.check) {
   settings.push(`scripts.check=${manifest.scripts.check.replace(/ && npm run check:deno\b/g, "")}`);
 }
 if (manifest.scripts?.["testonly:cover"]) {
-  settings.push(`scripts.testonly:cover=${manifest.scripts["testonly:cover"].replace(/--test-coverage-(lines|branches)=\d+/g, "--test-coverage-$1=97")}`);
+  settings.push(`scripts.testonly:cover=${manifest.scripts["testonly:cover"]
+    .replace(/--test-coverage-lines=\d+/g, "--test-coverage-lines=97")
+    .replace(/--test-coverage-branches=\d+/g, "--test-coverage-branches=96")}`);
 }
 if (manifest.scripts?.["check:spelling"]) {
   const spelling = manifest.scripts["check:spelling"];

@@ -5,7 +5,7 @@ import { async, commands, makeSchedulable } from "../src/index.ts";
 test("execute iterators yield once, return the supplied result, and stay completed", () => {
   let calls = 0;
   const child = makeSchedulable(function* () { calls++; return 7; });
-  for (const factory of [child.command, commands.execute(child)]) {
+  for (const factory of [child.schedulable, commands.execute(child)]) {
     const iterator = factory();
     assert.equal(iterator[Symbol.iterator](), iterator);
     assert.equal(iterator.next(99).done, false);
@@ -60,14 +60,14 @@ test("command yields before entering its child when the deadline expires", async
     bump() { expired = false; bumps++; },
   };
   const child = makeSchedulable(function* () { entered++; return 7; });
-  const parent = makeSchedulable(function* () { return yield* child.command(); });
-  const promise = async(parent, { signal })();
+  const parent = makeSchedulable(function* () { return yield* child.schedulable(); });
+  const promise = async(parent.schedulable(), { signal });
   assert.equal(entered, 0);
   assert.equal(await promise, 7);
   assert.equal(bumps, 1);
 
   const controller = new AbortController();
   controller.abort();
-  await assert.rejects(async(parent, { signal: controller.signal })());
+  await assert.rejects(async(parent.schedulable(), { signal: controller.signal }));
   assert.equal(entered, 1);
 });

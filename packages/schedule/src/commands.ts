@@ -46,17 +46,13 @@ export function execute<Fn extends (...args: any[]) => unknown>(
   fn: HasMultipleSignatures<Fn> extends true
     ? Fn
     : Fn extends SchedulableMarker<
-          (...args: any[]) => SchedulableIterable<unknown>,
-          any,
-          any
+          (...args: any[]) => SchedulableIterable<unknown>
         >
       ? Fn
       : never,
   startImmediately?: boolean,
 ): Fn extends SchedulableMarker<
-  (...args: any[]) => SchedulableIterable<unknown>,
-  any,
-  any
+  (...args: any[]) => SchedulableIterable<unknown>
 >
   ? Fn[typeof schedulableImplementationSymbol]
   : MapResults<Fn, ToSchedulable>;

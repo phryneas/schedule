@@ -11,22 +11,25 @@ const sum = makeSchedulable(function* (
 });
 
 expectTypeOf(sum([1, 2, 3])).toEqualTypeOf<number>();
-expectTypeOf(sync(sum)([1, 2, 3])).toEqualTypeOf<number>();
-expectTypeOf(async(sum)([1, 2, 3])).toEqualTypeOf<Promise<number>>();
-expectTypeOf(sync(sum)).parameters.toEqualTypeOf<[number[]]>();
-expectTypeOf(async(sum)).parameters.toEqualTypeOf<[number[]]>();
+expectTypeOf(sync(sum.schedulable([1, 2, 3]))).toEqualTypeOf<number>();
+expectTypeOf(async(sum.schedulable([1, 2, 3]))).toEqualTypeOf<Promise<number>>();
+expectTypeOf(sum.schedulable).parameters.toEqualTypeOf<[number[]]>();
+// @ts-expect-error Schedulers accept iterables, not functions.
+sync(sum);
+// @ts-expect-error Schedulers accept iterables, not functions.
+async(sum);
 
 declare const abortSignal: AbortSignal;
 declare const scheduleSignal: ScheduleSignal;
-expectTypeOf(async(sum, { signal: abortSignal, startImmediately: false })([1]))
+expectTypeOf(async(sum.schedulable([1]), { signal: abortSignal, startImmediately: false }))
   .toEqualTypeOf<Promise<number>>();
-expectTypeOf(async(sum, { signal: scheduleSignal, startImmediately: true })([1]))
+expectTypeOf(async(sum.schedulable([1]), { signal: scheduleSignal, startImmediately: true }))
   .toEqualTypeOf<Promise<number>>();
-expectTypeOf(async(sum, {})([1])).toEqualTypeOf<Promise<number>>();
+expectTypeOf(async(sum.schedulable([1]), {})).toEqualTypeOf<Promise<number>>();
 // @ts-expect-error Signals must be passed inside the options object.
-async(sum, abortSignal);
+async(sum.schedulable([]), abortSignal);
 // @ts-expect-error startImmediately must be a boolean.
-async(sum, { startImmediately: "false" });
+async(sum.schedulable([]), { startImmediately: "false" });
 
 makeSchedulable(function* (): SchedulableIterable<number> {
   expectTypeOf(yield* yieldNow).toEqualTypeOf<void>();
@@ -38,24 +41,23 @@ makeSchedulable(function* (): SchedulableIterable<number> {
 });
 
 // @ts-expect-error Preserve the argument type of the original function.
-sync(sum)("not an array");
+sync(sum.schedulable("not an array"));
 // @ts-expect-error Preserve the argument type of the original function.
-async(sum)("not an array");
+async(sum.schedulable("not an array"));
 
 const identity = makeSchedulable<{
   <T>(value: T): T;
+  schedulable: <T>(value: T) => SchedulableIterable<T>;
   [key]: {
     <T>(value: T): SchedulableIterable<T>;
-    syncSignature?<T>(value: T): T;
-    asyncSignature?<T>(value: T): Promise<Awaited<T>>;
   };
 }>(function* <T>(value: T): SchedulableIterable<T> {
   return value;
 });
 
-expectTypeOf(sync(identity)(42)).toEqualTypeOf<number>();
-expectTypeOf(sync(identity)(42 as const)).toEqualTypeOf<42>();
+expectTypeOf(sync(identity.schedulable(42))).toEqualTypeOf<number>();
+expectTypeOf(sync(identity.schedulable(42 as const))).toEqualTypeOf<42>();
 
-expectTypeOf(async(identity)("hello")).toEqualTypeOf<Promise<string>>();
+expectTypeOf(async(identity.schedulable("hello"))).toEqualTypeOf<Promise<string>>();
 
 expectTypeOf(execute(identity)(42)).toEqualTypeOf<SchedulableIterable<number>>();

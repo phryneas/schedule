@@ -9,8 +9,6 @@ type EnumCoercer = {
   (inputValue: unknown, hideSuggestions?: boolean | null): unknown;
   [schedulableImplementationSymbol]: {
     (inputValue: unknown, hideSuggestions?: boolean | null): SchedulableIterable<unknown>;
-    syncSignature?: (inputValue: unknown, hideSuggestions?: boolean | null) => unknown;
-    asyncSignature?: (inputValue: unknown, hideSuggestions?: boolean | null) => Promise<unknown>;
   };
 };
 declare const type: { coerceInputValue: ScalarCoercer } | { coerceInputValue: EnumCoercer };

@@ -47,10 +47,10 @@ for (const signalKind of ["AbortSignal", "ScheduleSignal"] as const) {
           startImmediately: true,
         })();
       });
-      const pending = async(work, {
+      const pending = async(work.schedulable(), {
         signal: wrapSignal(controller.signal),
         startImmediately: true,
-      })();
+      });
       if (outcome !== "abort in callback") {
         assert.equal(getEventListeners(controller.signal, "abort").length, 1);
       }
@@ -98,10 +98,10 @@ for (const signalKind of ["AbortSignal", "ScheduleSignal"] as const) {
         }
       });
 
-      const pending = async(parent, {
+      const pending = async(parent.schedulable(), {
         signal: wrapSignal(controller.signal),
         startImmediately: true,
-      })();
+      });
       controller.abort(reason);
 
       await assert.rejects(pending, (error) => error === reason);
@@ -140,7 +140,7 @@ test("cancellation while advancing an iterator is terminal", async () => {
       });
 
       await assert.rejects(
-        async(work, { signal: controller.signal, startImmediately: true })(),
+        async(work.schedulable(), { signal: controller.signal, startImmediately: true }),
         (error) => error === reason,
       );
       assert.deepEqual(events, ["closed"]);
@@ -156,10 +156,10 @@ test("AbortController cancels scheduled work", async () => {
     return 42;
   });
   const controller = new AbortController();
-  const pending = async(work, {
+  const pending = async(work.schedulable(), {
     signal: controller.signal,
     startImmediately: true,
-  })();
+  });
   controller.abort();
 
   await assert.rejects(pending, { name: "AbortError" });
@@ -176,11 +176,11 @@ test("execute propagates cancellation without affecting concurrent runs", async 
     return yield* execute(work)();
   });
   const controller = new AbortController();
-  const pending = async(parent, {
+  const pending = async(parent.schedulable(), {
     signal: controller.signal,
     startImmediately: true,
-  })();
-  const independent = async(parent)();
+  });
+  const independent = async(parent.schedulable());
   controller.abort();
 
   await assert.rejects(pending, { name: "AbortError" });
@@ -195,7 +195,7 @@ test("ordinary execute callback errors reject the scheduled run", async () => {
     })();
   });
 
-  await assert.rejects(async(parent)(), (error) => error === reason);
+  await assert.rejects(async(parent.schedulable()), (error) => error === reason);
 });
 
 test("cancellation during a scheduling wait closes active frames with a custom signal", async () => {
@@ -212,7 +212,7 @@ test("cancellation during a scheduling wait closes active frames with a custom s
       },
       addEventListener: controller.signal.addEventListener.bind(controller.signal),
       removeEventListener: controller.signal.removeEventListener.bind(controller.signal),
-      shouldYield: true,
+      shouldYield: false,
       bump() {
         events.push("bump");
       },
@@ -220,6 +220,7 @@ test("cancellation during a scheduling wait closes active frames with a custom s
     const child = makeSchedulable(function* () {
       try {
         events.push("entered");
+        signal.shouldYield = true;
         if (command === "yield") {
           yield* yieldNow;
         } else if (command === "execute") {
@@ -250,7 +251,7 @@ test("cancellation during a scheduling wait closes active frames with a custom s
       }
     });
 
-    const pending = async(parent, { signal, startImmediately: true })();
+    const pending = async(parent.schedulable(), { signal, startImmediately: true });
     assert.deepEqual(events, ["entered"]);
     controller.abort(reason);
 

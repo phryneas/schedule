@@ -90,7 +90,7 @@ test("GraphQL workflow round-trips patches and regenerates transformed sources",
   assert.equal(configured.version, "17.0.0");
   assert.equal(configured.engines.node, "^24.0.0 || >=26.0.0");
   assert.equal(configured.scripts.check, "npm run check:ts && npm run extra");
-  assert.match(configured.scripts["testonly:cover"], /--test-coverage-lines=97 --test-coverage-branches=97 --test-coverage-functions=100/);
+  assert.match(configured.scripts["testonly:cover"], /--test-coverage-lines=97 --test-coverage-branches=96 --test-coverage-functions=100/);
   assert.equal(configured.scripts["check:spelling"], 'cspell --gitignore-root . --cache "**/*"');
   assert.equal(configured.dependencies["@phryneas/schedule"], `file:${schedule}`);
   const lock = JSON.parse(await readFile(join(patched, "package-lock.json"), "utf8"));

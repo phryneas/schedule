@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { transformSource } from "../src/index.ts";
-import { async as scheduled, schedulableImplementationSymbol } from "../../schedule/src/index.ts";
+import { async as scheduled, execute, schedulableImplementationSymbol } from "../../schedule/src/index.ts";
 
 const runtimeModule = new URL("../../schedule/src/index.ts", import.meta.url).href;
 
@@ -36,7 +36,9 @@ test("cancellation completes finally loops and synchronous cleanup calls", async
   const controller = new AbortController();
   const reason = new Error("cancelled");
   const events: unknown[] = [];
-  const pending = scheduled(module.work, {
+  const pending = scheduled(execute(module.work, true)(events, {
+    release(this: unknown, log: unknown[]) { log.push('released'); },
+  }), {
     startImmediately: true,
     signal: {
       get aborted() { return controller.signal.aborted; },
@@ -46,8 +48,6 @@ test("cancellation completes finally loops and synchronous cleanup calls", async
       shouldYield: true,
       bump() {},
     },
-  })(events, {
-    release(this: unknown, log: unknown[]) { log.push('released'); },
   });
   controller.abort(reason);
   await assert.rejects(pending, error => error === reason);

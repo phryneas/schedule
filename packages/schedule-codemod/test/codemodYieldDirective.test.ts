@@ -22,7 +22,7 @@ test("directives make a loop schedulable and yield at the marked positions", asy
   assert.match(output, /if \(\(_signal \?\?= yield\* _commands.getSignal\).shouldYield\)/);
   const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
   assert.equal(module.sum([1, 2, 3]), 6);
-  assert.equal(await scheduled(module.sum)([1, 2, 3]), 6);
+  assert.equal(await scheduled(module.sum.schedulable([1, 2, 3])), 6);
   for (const shouldYield of [false, true]) {
     const iterator = module.sum[schedulableImplementationSymbol]([1, 2, 3]);
     assert.deepEqual(iterator.next().value, { kind: "getSignal" });
@@ -84,8 +84,8 @@ export class Worker {
 `, "fixture.js", { runtimeModule });
   const module = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
   assert.equal(module.work(), 3);
-  assert.equal(await scheduled(module.work)(), 3);
+  assert.equal(await scheduled(module.work.schedulable()), 3);
   const worker = new module.Worker();
   assert.equal(worker.run(), 4);
-  assert.equal(await scheduled(worker.run).call(worker), 4);
+  assert.equal(await scheduled(worker.run.schedulable.call(worker)), 4);
 });

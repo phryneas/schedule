@@ -364,8 +364,8 @@ index f8c31d3184191566822c65d7fa131cc8972d1727..f84eaa98ec5678b6d4d7ee50062b6478
 -    );
 +    const getFields = GraphQLInputObjectType.prototype.getFields;
 +    const getFieldsSpy =
-+      'command' in getFields
-+        ? spyOnMethod(getFields, 'command')
++      'schedulable' in getFields
++        ? spyOnMethod(getFields, 'schedulable')
 +        : spyOnMethod(GraphQLInputObjectType.prototype, 'getFields');
 +    t.after(() => getFieldsSpy.restore());
  

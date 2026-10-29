@@ -45,6 +45,7 @@ test(`standalone generator overloads preserve published call signatures (${mode 
     }
 
     export class Picker<A extends object, B, C = string> {
+      dynamic<T>(callback: (value: T) => T, value: T): T { return callback(value); }
       static value = 7;
       static read(): number { return plain(this.value); }
       identity<T>(value: T): T { return plain(value); }
@@ -93,6 +94,7 @@ test(`standalone generator overloads preserve published call signatures (${mode 
   compile(["--declaration", "--emitDeclarationOnly", "--rootDir", root, "--outDir", declarations, source]);
   const declaration = join(declarations, relative(root, directory), "generated.d.mts");
   assert.match(await readFile(declaration, "utf8"), /schedulableImplementationSymbol/);
+  assert.doesNotMatch(await readFile(declaration, "utf8"), /schedulableImplementationSymbolRuntime/);
   const consumer = join(directory, "consumer.mts");
   await writeFile(consumer, `
     import { expectTypeOf } from "expect-type";
@@ -102,85 +104,85 @@ test(`standalone generator overloads preserve published call signatures (${mode 
     ${mode ? `
     import { annotated } from ${JSON.stringify(declaration.replace(/\.d\.mts$/, ".mjs"))};
     expectTypeOf(annotated.call({ base: 1 })).toEqualTypeOf<number>();
-    expectTypeOf(async(annotated).call({ base: 1 }, 2)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(async(annotated.schedulable.call({ base: 1 }, 2))).toEqualTypeOf<Promise<number>>();
     expectTypeOf(commands.execute(annotated).call({ base: 1 })).toEqualTypeOf<SchedulableIterable<number>>();
     // @ts-expect-error Preserve the annotated receiver.
     annotated.call({ base: "wrong" });
     ` : ""}
     expectTypeOf(simple(1)).toEqualTypeOf<number>();
-    expectTypeOf(async(simple)(1)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(async(simple.schedulable(1))).toEqualTypeOf<Promise<number>>();
     expectTypeOf(commands.execute(simple)(1)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(withArgs.call({ base: 1 })).toEqualTypeOf<number>();
-    expectTypeOf(async(withArgs).call({ base: 1 }, 2, 3)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(async(withArgs.schedulable.call({ base: 1 }, 2, 3))).toEqualTypeOf<Promise<number>>();
     expectTypeOf(commands.execute(withArgs).call({ base: 1 }, 2, 3)).toEqualTypeOf<SchedulableIterable<number>>();
     // @ts-expect-error Preserve the explicit receiver.
     withArgs.call({ base: "wrong" });
     // @ts-expect-error Preserve the rest parameter's element type.
     withArgs.call({ base: 1 }, 2, "wrong");
     expectTypeOf([1, 2, 3].map(identity)).toEqualTypeOf<number[]>();
-    expectTypeOf(async(identity)(42)).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(identity.command(42)).toEqualTypeOf<SchedulableIterable<number>>();
+    expectTypeOf(async(identity.schedulable(42))).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(identity.schedulable(42)).toEqualTypeOf<SchedulableIterable<number>>();
     const promise = Promise.resolve(42);
     expectTypeOf(identity(promise)).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(async(identity)(promise)).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(identity.command(promise)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
+    expectTypeOf(async(identity.schedulable(promise))).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(identity.schedulable(promise)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
     expectTypeOf(commands.execute(identity)(promise)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
     declare const nestedThenable: PromiseLike<PromiseLike<number>>;
-    expectTypeOf(async(identity)(nestedThenable)).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(identity.command(nestedThenable)).toEqualTypeOf<SchedulableIterable<PromiseLike<PromiseLike<number>>>>();
+    expectTypeOf(async(identity.schedulable(nestedThenable))).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(identity.schedulable(nestedThenable)).toEqualTypeOf<SchedulableIterable<PromiseLike<PromiseLike<number>>>>();
     expectTypeOf(promised(1)).toEqualTypeOf<Promise<number>>();
     expectTypeOf(promised("a")).toEqualTypeOf<Promise<string>>();
-    expectTypeOf(async(promised)(1)).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(async(promised)("a")).toEqualTypeOf<Promise<string>>();
-    expectTypeOf(promised.command(1)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
-    expectTypeOf(promised.command("a")).toEqualTypeOf<SchedulableIterable<Promise<string>>>();
+    expectTypeOf(async(promised.schedulable(1))).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(async(promised.schedulable("a"))).toEqualTypeOf<Promise<string>>();
+    expectTypeOf(promised.schedulable(1)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
+    expectTypeOf(promised.schedulable("a")).toEqualTypeOf<SchedulableIterable<Promise<string>>>();
     expectTypeOf(commands.execute(promised)(1)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
     expectTypeOf(commands.execute(promised)("a")).toEqualTypeOf<SchedulableIterable<Promise<string>>>();
     expectTypeOf(nullable(null)).toEqualTypeOf<void>();
     expectTypeOf(nullable("text")).toEqualTypeOf<string>();
-    expectTypeOf(async(nullable)(undefined)).toEqualTypeOf<Promise<void>>();
-    expectTypeOf(async(nullable)("text")).toEqualTypeOf<Promise<string>>();
+    expectTypeOf(async(nullable.schedulable(undefined))).toEqualTypeOf<Promise<void>>();
+    expectTypeOf(async(nullable.schedulable("text"))).toEqualTypeOf<Promise<string>>();
     expectTypeOf(commands.execute(nullable)(null)).toEqualTypeOf<SchedulableIterable<void>>();
     expectTypeOf(commands.execute(nullable)("text")).toEqualTypeOf<SchedulableIterable<string>>();
     declare const maybe: string | undefined;
     expectTypeOf(nullable(maybe)).toEqualTypeOf<string | undefined>();
     expectTypeOf(pick(1)).toEqualTypeOf<number>();
     expectTypeOf(pick("a")).toEqualTypeOf<string>();
-    expectTypeOf(pick.command(1)).toEqualTypeOf<SchedulableIterable<number>>();
-    expectTypeOf(pick.command("a")).toEqualTypeOf<SchedulableIterable<string>>();
-    expectTypeOf(async(pick)(1)).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(async(pick)("a")).toEqualTypeOf<Promise<string>>();
+    expectTypeOf(pick.schedulable(1)).toEqualTypeOf<SchedulableIterable<number>>();
+    expectTypeOf(pick.schedulable("a")).toEqualTypeOf<SchedulableIterable<string>>();
+    expectTypeOf(async(pick.schedulable(1))).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(async(pick.schedulable("a"))).toEqualTypeOf<Promise<string>>();
     expectTypeOf(commands.execute(pick)(1)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(commands.execute(pick)("a")).toEqualTypeOf<SchedulableIterable<string>>();
     const receiver = new Picker();
     const specialized = new Picker<object, boolean, number>();
     expectTypeOf(specialized.classValue(1)).toEqualTypeOf<number>();
-    expectTypeOf(async(specialized.classValue)(1)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(async(specialized.classValue.schedulable(1))).toEqualTypeOf<Promise<number>>();
     class Derived extends Picker<object, boolean, number> { extra = 1; }
     const derived = new Derived();
     expectTypeOf(derived.fluent()).toEqualTypeOf<Derived>();
-    expectTypeOf(async(derived.fluent)()).toEqualTypeOf<Promise<Derived>>();
+    expectTypeOf(async(derived.fluent.schedulable())).toEqualTypeOf<Promise<Derived>>();
     expectTypeOf(commands.execute(derived.fluent)()).toEqualTypeOf<SchedulableIterable<Derived>>();
     expectTypeOf([1, 2, 3].map(receiver.identity)).toEqualTypeOf<number[]>();
-    expectTypeOf(receiver.identity.command(1)).toEqualTypeOf<SchedulableIterable<number>>();
+    expectTypeOf(receiver.identity.schedulable(1)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(receiver.identity(promise)).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(async(receiver.identity)(promise)).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(receiver.identity.command(promise)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
+    expectTypeOf(async(receiver.identity.schedulable(promise))).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(receiver.identity.schedulable(promise)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
     expectTypeOf(commands.execute(receiver.identity)(promise)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
     expectTypeOf(receiver.promised(1)).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(async(receiver.promised)(1)).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(async(receiver.promised)("a")).toEqualTypeOf<Promise<string>>();
-    expectTypeOf(receiver.promised.command(1)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
-    expectTypeOf(receiver.promised.command("a")).toEqualTypeOf<SchedulableIterable<Promise<string>>>();
+    expectTypeOf(async(receiver.promised.schedulable(1))).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(async(receiver.promised.schedulable("a"))).toEqualTypeOf<Promise<string>>();
+    expectTypeOf(receiver.promised.schedulable(1)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
+    expectTypeOf(receiver.promised.schedulable("a")).toEqualTypeOf<SchedulableIterable<Promise<string>>>();
     expectTypeOf(commands.execute(receiver.promised)(1)).toEqualTypeOf<SchedulableIterable<Promise<number>>>();
     expectTypeOf(commands.execute(receiver.promised)("a")).toEqualTypeOf<SchedulableIterable<Promise<string>>>();
-    expectTypeOf(receiver.pick.command("a")).toEqualTypeOf<SchedulableIterable<string>>();
+    expectTypeOf(receiver.pick.schedulable("a")).toEqualTypeOf<SchedulableIterable<string>>();
     expectTypeOf([1, 2, 3].map(receiver.any)).toEqualTypeOf<number[]>();
     expectTypeOf([1, 2, 3].map(commands.execute(receiver.identity))).toEqualTypeOf<SchedulableIterable<number>[]>();
     declare const mutablePicker: Picker<object, boolean, Map<string, number>>;
     const readonlyPicker: Picker<object, boolean, ReadonlyMap<string, number>> = mutablePicker;
     expectTypeOf(specialized.store(1)).toEqualTypeOf<number>();
-    expectTypeOf(async(specialized.store)(1, 2)).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(async(specialized.store.schedulable(1, 2))).toEqualTypeOf<Promise<number>>();
     expectTypeOf(commands.execute(specialized.store)(1, 2)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(commands.execute(receiver.pick).bind(receiver)(1)).toEqualTypeOf<SchedulableIterable<number>>();
     expectTypeOf(commands.execute(receiver.pick).bind(receiver)("a")).toEqualTypeOf<SchedulableIterable<string>>();
@@ -192,19 +194,19 @@ test(`standalone generator overloads preserve published call signatures (${mode 
   const module = await import(pathToFileURL(source).href);
   const instance = new module.Picker();
   assert.equal(instance.fluent(), instance);
-  assert.equal(await async(instance.fluent).call(instance), instance);
+  assert.equal(await async(instance.fluent.schedulable.call(instance)), instance);
   assert.equal(instance.less(1, 2), true);
   assert.equal(module.Picker.read(), 7);
-  assert.equal(await async(module.Picker.read).call(module.Picker), 7);
+  assert.equal(await async(module.Picker.read.schedulable.call(module.Picker)), 7);
   assert.equal(module.nullable(null), undefined);
-  assert.equal(await async(module.nullable)(undefined), undefined);
-  assert.equal(await async(module.nullable)("text"), "text");
+  assert.equal(await async(module.nullable.schedulable(undefined)), undefined);
+  assert.equal(await async(module.nullable.schedulable("text")), "text");
   assert.equal(module.pick(42), 42);
-  assert.equal(await async(module.pick)("text"), "text");
+  assert.equal(await async(module.pick.schedulable("text")), "text");
   const work = makeSchedulable(function* () {
     return yield* commands.execute(module.pick)(42);
   });
   assert.equal(work(), 42);
-  assert.equal(await async(work)(), 42);
+  assert.equal(await async(work.schedulable()), 42);
 });
 }

@@ -1,6 +1,5 @@
 import type {
   SchedulableIterable,
-  SchedulableMarker,
   ScheduleSignal,
 } from "./types.ts";
 import { schedulableImplementationSymbol } from "./internal.ts";
@@ -19,16 +18,8 @@ export const syncSignal: ScheduleSignal = {
   },
 };
 
-export function sync<
-  Fn extends SchedulableMarker<(...args: any[]) => any, any, any>,
->(
-  fn: Fn,
-): NonNullable<Fn[typeof schedulableImplementationSymbol]["syncSignature"]> {
-  return function (this: any) {
-    return executeIterableSync(
-      fn[schedulableImplementationSymbol].apply(this, arguments as any),
-    );
-  };
+export function sync<T>(iterable: SchedulableIterable<T>): T {
+  return executeIterableSync(iterable);
 }
 
 export function executeIterableSync<T>(iterable: SchedulableIterable<T>): T {
