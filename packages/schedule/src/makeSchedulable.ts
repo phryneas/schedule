@@ -31,7 +31,7 @@ export function makeSchedulable<
     (...args: any[]) => SchedulableIterable<unknown>
   > & ((...args: any[]) => unknown),
 >(
-  schedulableImplementation: FullSignature[typeof schedulableImplementationSymbol],
+  schedulableImplementation: FullSignature["schedulable"],
 ): FullSignature;
 
 export function makeSchedulable<

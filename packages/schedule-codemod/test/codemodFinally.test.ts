@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { transformSource } from "../src/index.ts";
-import { async as scheduled, execute, schedulableImplementationSymbol } from "../../schedule/src/index.ts";
+import { async as scheduled, execute } from "../../schedule/src/index.ts";
+import { schedulableImplementationSymbol } from "../../schedule/src/internal.ts";
 
 const runtimeModule = new URL("../../schedule/src/index.ts", import.meta.url).href;
 

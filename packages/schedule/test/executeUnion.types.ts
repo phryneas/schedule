@@ -1,13 +1,13 @@
 // Reduced from GraphQLScalarType | GraphQLEnumType's coerceInputValue.
 import { expectTypeOf } from "expect-type";
 import { commands } from "../src/index.ts";
-import type { SchedulableIterable, schedulableImplementationSymbol } from "../src/index.ts";
+import type { SchedulableIterable } from "../src/index.ts";
 import type { HasMultipleSignatures, HasOverloads, IsUnion } from "../src/mapResults.ts";
 
 type ScalarCoercer = (inputValue: unknown) => unknown;
 type EnumCoercer = {
   (inputValue: unknown, hideSuggestions?: boolean | null): unknown;
-  [schedulableImplementationSymbol]: {
+  schedulable: {
     (inputValue: unknown, hideSuggestions?: boolean | null): SchedulableIterable<unknown>;
   };
 };
@@ -46,7 +46,7 @@ commands.execute(notAlwaysCallable);
 
 type GenericScheduled = {
   <T>(value: T): T;
-  [schedulableImplementationSymbol]: {
+  schedulable: {
     <T>(value: T): SchedulableIterable<T>;
   };
 };

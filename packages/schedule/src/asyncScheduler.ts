@@ -1,4 +1,4 @@
-import { schedulableImplementationSymbol } from "./internal.ts";
+import { getSchedulableImplementation } from "./internal.ts";
 import { isSchedulableFunction } from "./isSchedulableFunction.ts";
 import type { Command } from "./commands.ts";
 import type {
@@ -107,7 +107,7 @@ async function executeIterableAsync<T>(
             scheduleSignal.bump();
           }
           if (isSchedulableFunction(fn)) {
-            const child = fn[schedulableImplementationSymbol]
+            const child = getSchedulableImplementation(fn)
               .apply(thisArg, args)
               [Symbol.iterator]();
             const first = child.next();

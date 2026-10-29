@@ -112,6 +112,8 @@ Keep `T` unchanged in the synchronous signature and use `SchedulableIterable<T>`
 in the generator signatures. The schedulers infer their result from the iterable;
 no separate asynchronous signature is needed.
 
+Use `isSchedulableFunction(fn)` to detect functions created by `makeSchedulable`.
+
 ### `commands.syncAware({ sync, async })(...args)`
 
 Call an external dependency's synchronous or promise-returning implementation,

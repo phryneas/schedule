@@ -1,12 +1,11 @@
 import type { Command } from "./commands.ts";
-import type { schedulableImplementationSymbol } from "./internal.ts";
 
 export type SchedulableIterable<T> = Generator<Command, T>;
 
 export interface SchedulableMarker<
   GeneratorSignature extends (...args: any[]) => SchedulableIterable<unknown>,
 > {
-  [schedulableImplementationSymbol]: GeneratorSignature;
+  schedulable: GeneratorSignature;
 }
 
 type SchedulableImplementation<
@@ -21,7 +20,6 @@ export interface SchedulableFunction<
   ThisArg = unknown,
 > {
   (this: ThisArg, ...args: Args): Ret;
-  [schedulableImplementationSymbol]: SchedulableImplementation<Ret, Args, ThisArg>;
   schedulable: SchedulableImplementation<Ret, Args, ThisArg>;
 }
 
@@ -34,7 +32,6 @@ type SchedulableMethodImplementation<ThisArg, Args extends unknown[], Ret> =
 
 interface SchedulableMethodSignature<ThisArg, Args extends unknown[], Ret>
   extends MethodOf<ThisArg, Args, Ret> {
-  [schedulableImplementationSymbol]: SchedulableMethodImplementation<ThisArg, Args, Ret>;
   schedulable: SchedulableMethodImplementation<ThisArg, Args, Ret>;
 }
 

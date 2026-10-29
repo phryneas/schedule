@@ -93,8 +93,8 @@ test(`standalone generator overloads preserve published call signatures (${mode 
   const declarations = join(directory, "declarations");
   compile(["--declaration", "--emitDeclarationOnly", "--rootDir", root, "--outDir", declarations, source]);
   const declaration = join(declarations, relative(root, directory), "generated.d.mts");
-  assert.match(await readFile(declaration, "utf8"), /schedulableImplementationSymbol/);
-  assert.doesNotMatch(await readFile(declaration, "utf8"), /schedulableImplementationSymbolRuntime/);
+  assert.match(await readFile(declaration, "utf8"), /schedulable:/);
+  assert.doesNotMatch(await readFile(declaration, "utf8"), /schedulableImplementationSymbol|isSchedulableFunction/);
   const consumer = join(directory, "consumer.mts");
   await writeFile(consumer, `
     import { expectTypeOf } from "expect-type";

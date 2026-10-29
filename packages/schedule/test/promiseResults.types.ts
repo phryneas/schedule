@@ -1,6 +1,6 @@
 import { expectTypeOf } from "expect-type";
 import { async, commands, makeSchedulable, sync } from "../src/index.ts";
-import type { SchedulableIterable, SchedulableMethod, schedulableImplementationSymbol as key } from "../src/index.ts";
+import type { SchedulableIterable, SchedulableMethod } from "../src/index.ts";
 
 const child = makeSchedulable(function* (value: number) {
   return Promise.resolve(value);
@@ -45,8 +45,7 @@ async(child.schedulable("wrong"));
 
 type Identity = {
   <T>(value: T): T;
-  schedulable: Identity[typeof key];
-  [key]: {
+  schedulable: {
     <T>(value: T): SchedulableIterable<T>;
   };
 };

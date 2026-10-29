@@ -1,7 +1,6 @@
 import { expectTypeOf } from "expect-type";
 import { commands, makeSchedulable } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
-import type { schedulableImplementationSymbol as key } from "../src/index.ts";
 
 function identity<T>(value: T): T { return value; }
 expectTypeOf(commands.execute(identity)(42)).toEqualTypeOf<SchedulableIterable<number>>();
@@ -21,7 +20,7 @@ if (optional.method) {
 
 const generic = makeSchedulable<{
   <T>(value: T): T;
-  [key]: {
+  schedulable: {
     <T>(value: T): SchedulableIterable<T>;
   };
 }>(function* <T>(value: T): SchedulableIterable<T> { return value; });

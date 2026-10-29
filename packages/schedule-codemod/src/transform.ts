@@ -40,8 +40,7 @@ export default function schedulerPlugin(
         const make = program.scope.generateUidIdentifier("makeSchedulable");
         const commands = program.scope.generateUidIdentifier("commands");
         const iterable = program.scope.generateUidIdentifier("SchedulableIterable");
-        const marker = program.scope.generateUidIdentifier("schedulableImplementationSymbol");
-        const runtimeMarker = program.scope.generateUidIdentifier("schedulableImplementationSymbolRuntime");
+        const isSchedulable = program.scope.generateUidIdentifier("isSchedulableFunction");
         const methodType = program.scope.generateUidIdentifier("SchedulableMethod");
         const functionType = program.scope.generateUidIdentifier("SchedulableFunction");
         const functions: NodePath<any>[] = [];
@@ -61,7 +60,7 @@ export default function schedulerPlugin(
         }
         let used = false;
         let usedCommands = false;
-        let usedRuntimeMarker = false;
+        let usedSchedulableCheck = false;
         let usedTypes = false;
         let usedMethodType = false;
         let usedFunctionType = false;
@@ -357,10 +356,8 @@ export default function schedulerPlugin(
             const sig = signature(node, mode);
             return t.tsCallSignatureDeclaration(sig.typeParameters, sig.parameters, sig.typeAnnotation);
           });
-          const property = t.tsPropertySignature(clone(marker), t.tsTypeAnnotation(t.tsTypeLiteral(calls("generator"))));
-          property.computed = true;
           const command = t.tsPropertySignature(t.identifier("schedulable"), t.tsTypeAnnotation(overloadType(nodes, "generator")));
-          return t.tsTypeLiteral([...calls("sync"), property, command]);
+          return t.tsTypeLiteral([...calls("sync"), command]);
         }
 
         function wrap(generator: Types.FunctionExpression, original: any, overloads: any[], declarations: Types.Statement[], implementationName: Types.Identifier) {
@@ -472,7 +469,7 @@ export default function schedulerPlugin(
                 const dynamic = !direct && !cached && !info?.hasCommand;
                 if (!direct && !cached) usedCommands = true;
                 if (dynamic) {
-                  usedRuntimeMarker = true;
+                  usedSchedulableCheck = true;
                   usedCommands = true;
                   signal ??= path.scope.generateUidIdentifier("signal");
                   before.unshift(t.logicalExpression("&&",
@@ -499,7 +496,7 @@ export default function schedulerPlugin(
                   path.scope.push({ id: clone(scheduled), kind: "let" });
                   // A mutable boolean keeps the callable's original type in both
                   // branches, including unions and functions transformed later.
-                  before.push(t.assignmentExpression("=", clone(scheduled), t.binaryExpression("in", clone(runtimeMarker), clone(fn))));
+                  before.push(t.assignmentExpression("=", clone(scheduled), t.callExpression(clone(isSchedulable), [clone(fn)])));
                   let ordinaryFactory = clone(fn);
                   if (hasReceiver && !applyArgs) ordinaryFactory = t.callExpression(t.memberExpression(ordinaryFactory, t.identifier("bind")), [clone(receiver)]);
                   const ordinary = applyArgs
@@ -881,8 +878,11 @@ export default function schedulerPlugin(
                 } else {
                   const syncName = program.scope.generateUidIdentifier(`${methodName.name}Sync`);
                   const generatorName = program.scope.generateUidIdentifier(`${methodName.name}Generator`);
-                  const markerProperty = shape.members.find(t.isTSPropertySignature)!;
-                  const markerShape = markerProperty.typeAnnotation!.typeAnnotation as Types.TSTypeLiteral;
+                  const generatorProperty = shape.members.find(t.isTSPropertySignature)!;
+                  const generatorShape = generatorProperty.typeAnnotation!.typeAnnotation;
+                  const generatorCalls = t.isTSFunctionType(generatorShape)
+                    ? [t.tsCallSignatureDeclaration(generatorShape.typeParameters, generatorShape.parameters, generatorShape.typeAnnotation)]
+                    : (generatorShape as Types.TSTypeLiteral).members.filter(t.isTSCallSignatureDeclaration);
                   const methods = (callSignatures: Types.TSCallSignatureDeclaration[], name: string) =>
                     callSignatures.map(sig => {
                       const method = t.tsMethodSignature(t.identifier(name), sig.typeParameters ? clone(sig.typeParameters) : null, sig.parameters.map(clone), sig.typeAnnotation ? clone(sig.typeAnnotation) : null);
@@ -892,12 +892,10 @@ export default function schedulerPlugin(
                     t.tsTypeAliasDeclaration(clone(name), declarationParams(), t.tsIndexedAccessType(
                       t.tsTypeLiteral(methods(callSignatures, "invoke")), t.tsLiteralType(t.stringLiteral("invoke"))));
                   declarations.push(methodAlias(syncName, calls));
-                  declarations.push(methodAlias(generatorName, markerShape.members.filter(t.isTSCallSignatureDeclaration)));
-                  const markerMember = t.tsPropertySignature(clone(marker), t.tsTypeAnnotation(reference(generatorName)));
-                  markerMember.computed = true;
+                  declarations.push(methodAlias(generatorName, generatorCalls));
                   const commandMember = t.tsPropertySignature(t.identifier("schedulable"), t.tsTypeAnnotation(reference(generatorName)));
                   declarations.push(t.tsInterfaceDeclaration(clone(methodName), declarationParams(),
-                    [t.tsExpressionWithTypeArguments(clone(syncName), argumentsFor())], t.tsInterfaceBody([markerMember, commandMember])));
+                    [t.tsExpressionWithTypeArguments(clone(syncName), argumentsFor())], t.tsInterfaceBody([commandMember])));
                 }
                 const existing = signatureNamespaces.get(cls) ?? [];
                 existing.unshift(...declarations);
@@ -955,13 +953,12 @@ export default function schedulerPlugin(
           program.unshiftContainer("body", t.importDeclaration([
             t.importSpecifier(clone(make), t.identifier("makeSchedulable")),
             ...(usedCommands ? [t.importSpecifier(clone(commands), t.identifier("commands"))] : []),
-            ...(usedRuntimeMarker ? [t.importSpecifier(clone(runtimeMarker), t.identifier("schedulableImplementationSymbol"))] : []),
+            ...(usedSchedulableCheck ? [t.importSpecifier(clone(isSchedulable), t.identifier("isSchedulableFunction"))] : []),
           ], t.stringLiteral(options.runtimeModule ?? "@phryneas/schedule")));
         }
         if (usedTypes) {
           const declaration = t.importDeclaration([
             t.importSpecifier(clone(iterable), t.identifier("SchedulableIterable")),
-            t.importSpecifier(clone(marker), t.identifier("schedulableImplementationSymbol")),
             ...(usedMethodType ? [t.importSpecifier(clone(methodType), t.identifier("SchedulableMethod"))] : []),
             ...(usedFunctionType ? [t.importSpecifier(clone(functionType), t.identifier("SchedulableFunction"))] : []),
           ], t.stringLiteral(options.runtimeModule ?? "@phryneas/schedule"));

@@ -1,5 +1,5 @@
 export { makeSchedulable } from "./makeSchedulable.ts";
-export { schedulableImplementationSymbol } from "./internal.ts";
+export { isSchedulableFunction } from "./isSchedulableFunction.ts";
 export { execute, getSignal, syncAware, yieldNow } from "./commands.ts";
 export * as commands from "./commands.ts";
 export type { Command } from "./commands.ts";

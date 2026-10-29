@@ -1,12 +1,10 @@
 import { expectTypeOf } from "expect-type";
 import { async, commands, makeSchedulable } from "../src/index.ts";
-import type { schedulableImplementationSymbol } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
 export const scheduled = makeSchedulable<{
   <X>(x: X): X;
-  schedulable: { <X>(x: X): SchedulableIterable<X> };
-  [schedulableImplementationSymbol]: {
+  schedulable: {
     <X>(x: X): SchedulableIterable<X>;
   };
 }>(function* <X>(x: X): SchedulableIterable<X> {
