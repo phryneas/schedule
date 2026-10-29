@@ -6,25 +6,27 @@ import type {
   ScheduleSignal,
 } from "./types.ts";
 
-interface AsyncOptions {
+interface AsyncOptions<EmittedValue> {
   signal?: AbortSignal | ScheduleSignal;
   startImmediately?: boolean;
+  onValue?: (value: EmittedValue) => void;
 }
 
-export async function async<T>(
-  iterable: SchedulableIterable<T>,
-  { signal, startImmediately }: AsyncOptions = {},
+export async function async<T, EmittedValue = never>(
+  iterable: SchedulableIterable<T, EmittedValue>,
+  { signal, startImmediately, onValue }: AsyncOptions<EmittedValue> = {},
 ): Promise<Awaited<T>> {
   if (!startImmediately) {
     await new Promise<void>(schedule);
   }
   signal?.throwIfAborted();
-  return executeIterableAsync(iterable, signal);
+  return executeIterableAsync(iterable, signal, onValue);
 }
 
-async function executeIterableAsync<T>(
-  iterable: SchedulableIterable<T>,
+async function executeIterableAsync<T, EmittedValue>(
+  iterable: SchedulableIterable<T, EmittedValue>,
   abortSignal?: AbortSignal | ScheduleSignal,
+  onValue?: (value: EmittedValue) => void,
 ): Promise<Awaited<T>> {
   let scheduleSignal: ScheduleSignal;
   if (abortSignal && "shouldYield" in abortSignal) {
@@ -52,14 +54,14 @@ async function executeIterableAsync<T>(
     };
   }
 
-  const parents: SchedulableIterable<unknown>[] = [];
-  let iterator: SchedulableIterable<unknown> = iterable[Symbol.iterator]();
-  let initialResult: IteratorResult<Command, unknown> | undefined;
+  const parents: SchedulableIterable<unknown, EmittedValue>[] = [];
+  let iterator: SchedulableIterable<unknown, EmittedValue> = iterable[Symbol.iterator]();
+  let initialResult: IteratorResult<Command<EmittedValue>, unknown> | undefined;
   let nextArg: unknown;
   let throwing = false;
   do {
     checkAborted();
-    let result: IteratorResult<Command, unknown>;
+    let result: IteratorResult<Command<EmittedValue>, unknown>;
     try {
       result =
         initialResult ??
@@ -87,6 +89,10 @@ async function executeIterableAsync<T>(
     }
     try {
       switch (result.value.kind) {
+        case "emit": {
+          onValue?.(result.value.value);
+          continue;
+        }
         case "getSignal": {
           nextArg = scheduleSignal;
           continue;
@@ -107,7 +113,7 @@ async function executeIterableAsync<T>(
             scheduleSignal.bump();
           }
           if (isSchedulableFunction(fn)) {
-            const child = getSchedulableImplementation(fn)
+            const child = getSchedulableImplementation<EmittedValue>(fn)
               .apply(thisArg, args)
               [Symbol.iterator]();
             const first = child.next();

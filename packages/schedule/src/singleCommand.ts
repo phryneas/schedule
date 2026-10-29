@@ -1,17 +1,17 @@
 import type { Command } from "./commands.ts";
 
 // The remaining Generator methods are inherited from the native prototype below.
-export interface SingleCommand<Ret> extends Generator<Command, Ret> {}
+export interface SingleCommand<Ret, EmittedValue = never> extends Generator<Command<EmittedValue>, Ret> {}
 
-export class SingleCommand<Ret> {
+export class SingleCommand<Ret, EmittedValue = never> {
   private state = 0;
-  protected command: Command | undefined;
+  protected command: Command<EmittedValue> | undefined;
 
-  constructor(command: Command) {
+  constructor(command: Command<EmittedValue>) {
     this.command = command;
   }
 
-  next(value?: Ret): IteratorResult<Command, Ret> {
+  next(value?: Ret): IteratorResult<Command<EmittedValue>, Ret> {
     if (this.state === 0) {
       this.state = 1;
       const command = this.command!;
@@ -32,7 +32,7 @@ export class SingleCommand<Ret> {
     throw error;
   }
 
-  return(value: Ret): IteratorResult<Command, Ret> {
+  return(value: Ret): IteratorResult<Command<EmittedValue>, Ret> {
     this.state = 2;
     this.command = undefined;
     return { value, done: true };

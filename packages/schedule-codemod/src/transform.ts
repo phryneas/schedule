@@ -496,7 +496,14 @@ export default function schedulerPlugin(
                   path.scope.push({ id: clone(scheduled), kind: "let" });
                   // A mutable boolean keeps the callable's original type in both
                   // branches, including unions and functions transformed later.
-                  before.push(t.assignmentExpression("=", clone(scheduled), t.callExpression(clone(isSchedulable), [clone(fn)])));
+                  const check = t.callExpression(clone(isSchedulable), [clone(fn)]);
+                  // Generated functions only introduce scheduling commands, never emissions.
+                  if (/\.[cm]?tsx?$/.test(state.filename ?? "")) {
+                    check.typeParameters = t.tsTypeParameterInstantiation([
+                      t.tsUnknownKeyword(), t.tsArrayType(t.tsAnyKeyword()), t.tsNeverKeyword(),
+                    ]);
+                  }
+                  before.push(t.assignmentExpression("=", clone(scheduled), check));
                   let ordinaryFactory = clone(fn);
                   if (hasReceiver && !applyArgs) ordinaryFactory = t.callExpression(t.memberExpression(ordinaryFactory, t.identifier("bind")), [clone(receiver)]);
                   const ordinary = applyArgs

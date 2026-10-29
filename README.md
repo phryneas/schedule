@@ -76,6 +76,38 @@ if (signal.shouldYield) {
 
 Put this check inside long loops, as in `sum` above, to keep the UI responsive.
 
+### `commands.emit(value)`
+
+Emit a partial result to the scheduler's optional `onValue` callback:
+
+```ts
+const runningTotals = makeSchedulable(function* (
+  values: number[],
+): SchedulableIterable<number, number> {
+  let total = 0;
+  for (const value of values) {
+    total += value;
+    yield* commands.emit(total);
+    yield* commands.yieldNow;
+  }
+  return total;
+});
+
+const result = await async(runningTotals.schedulable([1, 2, 3]), {
+  onValue(total) { console.log(total); }, // 1, 3, 6
+});
+// result is 6. sync(iterable, { onValue }) accepts the same callback.
+```
+
+`SchedulableIterable<ReturnValue, EmittedValue = never>` tracks the final result
+and emitted values separately. `onValue` receives the inferred emission type,
+including emissions from scheduled child calls. Without a callback, emitted
+values are dropped. Calling a schedulable function directly also drops them.
+
+The callback runs synchronously in both modes; its return value is ignored.
+A thrown error is delivered to the generator at `emit`, where it can be caught.
+`emit` returns `undefined` and does not itself yield to the event loop.
+
 ### `commands.execute(fn)(...args)`
 
 Call another function and get its result, using the current execution mode.

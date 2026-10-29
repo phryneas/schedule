@@ -18,11 +18,17 @@ export const syncSignal: ScheduleSignal = {
   },
 };
 
-export function sync<T>(iterable: SchedulableIterable<T>): T {
-  return executeIterableSync(iterable);
+export function sync<T, EmittedValue = never>(
+  iterable: SchedulableIterable<T, EmittedValue>,
+  { onValue }: { onValue?: (value: EmittedValue) => void } = {},
+): T {
+  return executeIterableSync(iterable, onValue);
 }
 
-export function executeIterableSync<T>(iterable: SchedulableIterable<T>): T {
+export function executeIterableSync<T, EmittedValue = never>(
+  iterable: SchedulableIterable<T, EmittedValue>,
+  onValue?: (value: EmittedValue) => void,
+): T {
   const iterator = iterable[Symbol.iterator]();
   let nextArg: unknown;
   let throwing = false;
@@ -35,6 +41,10 @@ export function executeIterableSync<T>(iterable: SchedulableIterable<T>): T {
     }
     try {
       switch (result.value.kind) {
+      case "emit": {
+        onValue?.(result.value.value);
+        break;
+      }
       case "getSignal": {
         nextArg = syncSignal;
         break;
@@ -47,7 +57,7 @@ export function executeIterableSync<T>(iterable: SchedulableIterable<T>): T {
       case "execute": {
         const { fn, args, this: thisArg } = result.value;
         nextArg = isSchedulableFunction(fn)
-          ? executeIterableSync(getSchedulableImplementation(fn).apply(thisArg, args))
+          ? executeIterableSync(getSchedulableImplementation<EmittedValue>(fn).apply(thisArg, args), onValue)
           : fn.apply(thisArg, args);
         break;
       }

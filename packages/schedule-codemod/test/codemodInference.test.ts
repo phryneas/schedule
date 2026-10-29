@@ -88,7 +88,7 @@ test("a guarded callback stays schedulable while the synchronous branch stays di
 import { isSchedulableFunction } from ${JSON.stringify(join(root, "packages/schedule/src/isSchedulableFunction.ts"))};
 export function run(fn: (this: { value: number }) => number, receiver: { value: number }): number {
   // @phryneas/schedule may-yield-here
-  if (isSchedulableFunction<number, []>(fn)) return fn.call(receiver);
+  if (isSchedulableFunction<number, [], never>(fn)) return fn.call(receiver);
   // @phryneas/schedule synchronous
   return fn.call(receiver);
 }

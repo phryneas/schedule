@@ -46,7 +46,7 @@ index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd
 +      const expected = parse(source);
 +      const events: Array<string> = [];
 +      const original = Parser.prototype.parseDefinition;
-+      if (!isSchedulableFunction<DefinitionNode, []>(original)) {
++      if (!isSchedulableFunction<DefinitionNode, [], never>(original)) {
 +        throw new Error('Expected parseDefinition to be schedulable');
 +      }
 +      Parser.prototype.parseDefinition = makeSchedulable(function* (

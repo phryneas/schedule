@@ -15,9 +15,10 @@ interface ToSchedulable extends TypeFunction {
   readonly output: SchedulableIterable<this["input"]>;
 }
 
-export type Command =
+export type Command<EmittedValue = never> =
   | { kind: "getSignal" }
   | { kind: "yield" }
+  | { kind: "emit"; value: EmittedValue }
   | {
       kind: "execute";
       fn: (...args: Array<unknown>) => unknown;
@@ -41,17 +42,21 @@ export const yieldNow: SchedulableIterable<void> = new ReusableCommand<void>(
 export const getSignal: SchedulableIterable<ScheduleSignal> =
   new ReusableCommand<ScheduleSignal>({ kind: "getSignal" });
 
+export function emit<EmittedValue>(value: EmittedValue): SchedulableIterable<void, EmittedValue> {
+  return new SingleCommand<void, EmittedValue>({ kind: "emit", value });
+}
+
 export function execute<Fn extends (...args: any[]) => unknown>(
   fn: HasMultipleSignatures<Fn> extends true
     ? Fn
     : Fn extends SchedulableMarker<
-          (...args: any[]) => SchedulableIterable<unknown>
+          (...args: any[]) => SchedulableIterable<unknown, unknown>
         >
       ? Fn
       : never,
   startImmediately?: boolean,
 ): Fn extends SchedulableMarker<
-  (...args: any[]) => SchedulableIterable<unknown>
+  (...args: any[]) => SchedulableIterable<unknown, unknown>
 >
   ? Fn["schedulable"]
   : MapResults<Fn, ToSchedulable>;
