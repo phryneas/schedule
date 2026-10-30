@@ -5,7 +5,7 @@ export interface SingleCommand<Ret, EmittedValue = never> extends Generator<Comm
 
 export class SingleCommand<Ret, EmittedValue = never> {
   private state = 0;
-  protected command: Command<EmittedValue> | undefined;
+  public command: Command<EmittedValue> | undefined;
 
   constructor(command: Command<EmittedValue>) {
     this.command = command;
