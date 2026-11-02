@@ -6,3 +6,5 @@ export type { Command } from "./commands.ts";
 export type { SchedulableFunction, SchedulableIterable, SchedulableMarker, SchedulableMethod } from "./types.ts";
 export { sync } from "./syncScheduler.ts";
 export { async } from "./asyncScheduler.ts";
+export { ScheduleController } from "./scheduleController.ts";
+export type { ScheduleSignal } from "./types.ts";

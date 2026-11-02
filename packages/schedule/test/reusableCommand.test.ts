@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { ScheduleController } from "../src/index.ts";
 import test from "node:test";
 import { async, commands, makeSchedulable } from "../src/index.ts";
 
@@ -43,15 +44,13 @@ test("bounded iterator helpers and disposal leave reusable commands usable", () 
 });
 
 test("overlapping asynchronous runs retain their own signals across yields", async () => {
-  const signals = Array.from({ length: 5 }, () => ({
-    aborted: false,
-    shouldYield: false,
-    throwIfAborted() {},
-    addEventListener() {},
-    removeEventListener() {},
-    bumps: 0,
-    bump() { this.bumps++; },
-  }));
+  class CountingController extends ScheduleController {
+    bumps = 0;
+    protected override get shouldYield() { return false; }
+    protected override bump() { this.bumps++; }
+  }
+  const controllers = Array.from({ length: 5 }, () => new CountingController());
+  const signals = controllers.map(controller => controller.signal);
   const work = makeSchedulable(function* () {
     const before = yield* commands.getSignal;
     for (let i = 0; i < 3; i++) {
@@ -63,7 +62,7 @@ test("overlapping asynchronous runs retain their own signals across yields", asy
   const results = await Promise.all(signals.map(signal => async(work.schedulable(), { signal })));
   signals.forEach((signal, i) => {
     assert.equal(results[i], signal);
-    assert.equal(signal.bumps, 3);
+    assert.equal(controllers[i]!.bumps, 3);
   });
 });
 

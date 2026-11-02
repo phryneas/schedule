@@ -1,3 +1,4 @@
+import { ScheduleController } from "../../schedule/src/index.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -41,12 +42,10 @@ test("dynamic ordinary calls keep a deadline boundary and evaluate calls conditi
   };
   const argument = () => { events.push("argument"); return 3; };
   let expired = true;
-  const signal = {
-    aborted: false, throwIfAborted() {},
-    addEventListener() {}, removeEventListener() {},
-    get shouldYield() { return expired; },
-    bump() { expired = false; events.push("yielded"); },
-  };
+  const signal = new (class extends ScheduleController {
+    protected override get shouldYield() { return expired; }
+    protected override bump() { expired = false; events.push("yielded"); }
+  })().signal;
   assert.equal(await scheduled(commands.execute(module.run, true)(object, argument, false), { signal }), false);
   assert.deepEqual(events, []);
   const pending = scheduled(commands.execute(module.run, true)(object, argument, true), { signal });

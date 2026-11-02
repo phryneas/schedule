@@ -46,6 +46,49 @@ a promise of the awaited result. Create a fresh iterable for each execution.
 The `.schedulable(...args)` shortcut creates a command that defers the underlying
 function's execution until the scheduler runs it.
 
+## Custom scheduling
+
+Subclass `ScheduleController` to customize when work yields and how it resumes.
+Override `shouldYield` to request a pause, `bump()` to reset your time budget after
+a pause, and `schedule(callback)` to arrange for work to resume:
+
+```ts
+import { ScheduleController } from "@phryneas/schedule";
+
+class CustomController extends ScheduleController {
+  private deadline = performance.now() + 8;
+
+  protected override get shouldYield(): boolean {
+    this.signal.throwIfAborted();
+    return performance.now() >= this.deadline;
+  }
+
+  protected override bump(): void {
+    this.deadline = performance.now() + 8;
+  }
+
+  protected override schedule(callback: () => void): void {
+    setTimeout(callback, 0);
+  }
+}
+
+const parent = new AbortController();
+const controller = new CustomController({ signal: parent.signal });
+try {
+  await async(sum.schedulable([1, 2, 3]), { signal: controller.signal });
+} finally {
+  controller.dispose();
+}
+```
+
+`ScheduleController` extends `AbortController`, so you can cancel work with
+`controller.abort(reason)` and pass its signal to other APIs that accept an
+`AbortSignal`. The optional parent signal cancels the controller with the same
+reason; cancelling the controller does not cancel its parent.
+
+Call `dispose()` when you no longer need the controller to follow its parent.
+It disconnects parent cancellation without cancelling work itself.
+
 ## Commands
 
 Import `commands` and use `yield*` with each command inside your generator.

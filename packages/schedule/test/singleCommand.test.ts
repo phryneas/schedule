@@ -1,3 +1,4 @@
+import { ScheduleController } from "../src/index.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { async, commands, makeSchedulable } from "../src/index.ts";
@@ -51,14 +52,10 @@ test("command yields before entering its child when the deadline expires", async
   let entered = 0;
   let expired = true;
   let bumps = 0;
-  const signal = {
-    aborted: false,
-    throwIfAborted() {},
-    addEventListener() {},
-    removeEventListener() {},
-    get shouldYield() { return expired; },
-    bump() { expired = false; bumps++; },
-  };
+  const signal = new (class extends ScheduleController {
+    protected override get shouldYield() { return expired; }
+    protected override bump() { expired = false; bumps++; }
+  })().signal;
   const child = makeSchedulable(function* () { entered++; return 7; });
   const parent = makeSchedulable(function* () { return yield* child.schedulable(); });
   const promise = async(parent.schedulable(), { signal });

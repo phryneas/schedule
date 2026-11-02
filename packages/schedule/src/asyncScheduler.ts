@@ -1,6 +1,7 @@
 import { getSchedulableImplementation } from "./internal.ts";
 import { isSchedulableFunction } from "./isSchedulableFunction.ts";
 import type { Command } from "./commands.ts";
+import { ScheduleController } from "./scheduleController.ts";
 import type {
   SchedulableIterable,
   ScheduleSignal,
@@ -16,44 +17,27 @@ export async function async<T, EmittedValue = never>(
   iterable: SchedulableIterable<T, EmittedValue>,
   { signal, startImmediately, onValue }: AsyncOptions<EmittedValue> = {},
 ): Promise<Awaited<T>> {
-  if (!startImmediately) {
-    await new Promise<void>(schedule);
+  const controller = signal && "shouldYield" in signal
+    ? undefined
+    : new ScheduleController(signal ? { signal } : {});
+  const scheduleSignal = controller?.signal ?? (signal as ScheduleSignal);
+  try {
+    if (!startImmediately) {
+      await new Promise<void>((resolve) => scheduleSignal.schedule(resolve));
+      if (controller) scheduleSignal.bump();
+    }
+    scheduleSignal.throwIfAborted();
+    return await executeIterableAsync(iterable, scheduleSignal, onValue);
+  } finally {
+    controller?.dispose();
   }
-  signal?.throwIfAborted();
-  return executeIterableAsync(iterable, signal, onValue);
 }
 
 async function executeIterableAsync<T, EmittedValue>(
   iterable: SchedulableIterable<T, EmittedValue>,
-  abortSignal?: AbortSignal | ScheduleSignal,
+  scheduleSignal: ScheduleSignal,
   onValue?: (value: EmittedValue) => void,
 ): Promise<Awaited<T>> {
-  let scheduleSignal: ScheduleSignal;
-  if (abortSignal && "shouldYield" in abortSignal) {
-    scheduleSignal = abortSignal;
-  } else {
-    let nextYield = performance.now() + 16;
-    scheduleSignal = {
-      get aborted() {
-        return abortSignal?.aborted ?? false;
-      },
-      throwIfAborted() {
-        abortSignal?.throwIfAborted();
-      },
-      addEventListener:
-        abortSignal?.addEventListener.bind(abortSignal) ?? (() => {}),
-      removeEventListener:
-        abortSignal?.removeEventListener.bind(abortSignal) ?? (() => {}),
-      get shouldYield() {
-        abortSignal?.throwIfAborted();
-        return performance.now() >= nextYield;
-      },
-      bump() {
-        nextYield = performance.now() + 16;
-      },
-    };
-  }
-
   const parents: SchedulableIterable<unknown, EmittedValue>[] = [];
   let iterator: SchedulableIterable<unknown, EmittedValue> = iterable[Symbol.iterator]();
   let initialResult: IteratorResult<Command<EmittedValue>, unknown> | undefined;
@@ -98,7 +82,7 @@ async function executeIterableAsync<T, EmittedValue>(
           continue;
         }
         case "yield": {
-          await new Promise<void>(schedule);
+          await new Promise<void>((resolve) => scheduleSignal.schedule(resolve));
           checkAborted();
           scheduleSignal.bump();
           // A defined resumption value completes the reusable yield command.
@@ -108,7 +92,7 @@ async function executeIterableAsync<T, EmittedValue>(
         case "execute": {
           const { fn, args, this: thisArg, startImmediately } = result.value;
           if (!startImmediately && scheduleSignal.shouldYield) {
-            await new Promise<void>(schedule);
+            await new Promise<void>((resolve) => scheduleSignal.schedule(resolve));
             checkAborted();
             scheduleSignal.bump();
           }
@@ -132,7 +116,7 @@ async function executeIterableAsync<T, EmittedValue>(
         case "syncAware": {
           const { async, args, this: thisArg, startImmediately } = result.value;
           if (!startImmediately && scheduleSignal.shouldYield) {
-            await new Promise<void>(schedule);
+            await new Promise<void>((resolve) => scheduleSignal.schedule(resolve));
             checkAborted();
             scheduleSignal.bump();
           }
@@ -142,20 +126,16 @@ async function executeIterableAsync<T, EmittedValue>(
             Promise.resolve(value).catch(() => {});
             checkAborted();
           }
-          if (!abortSignal) {
-            nextArg = await value;
-          } else {
-            nextArg = await new Promise<unknown>((resolve, reject) => {
-              // Wake the scheduler so its terminal cancellation check closes the frames.
-              abortSignal.addEventListener("abort", reject, { once: true });
-              // Keep observing the operation even if cancellation wins the race.
-              Promise.resolve(value)
-                .then(resolve, reject)
-                .finally(() =>
-                  abortSignal.removeEventListener("abort", reject),
-                );
-            });
-          }
+          nextArg = await new Promise<unknown>((resolve, reject) => {
+            // Wake the scheduler so its terminal cancellation check closes the frames.
+            scheduleSignal.addEventListener("abort", reject, { once: true });
+            // Keep observing the operation even if cancellation wins the race.
+            Promise.resolve(value)
+              .then(resolve, reject)
+              .finally(() =>
+                scheduleSignal.removeEventListener("abort", reject),
+              );
+          });
 
           continue;
         }
@@ -178,13 +158,4 @@ async function executeIterableAsync<T, EmittedValue>(
       return scheduleSignal.throwIfAborted();
     }
   }
-}
-
-function schedule(fn: () => void) {
-  const { port1, port2 } = new MessageChannel();
-  port1.onmessage = () => {
-    port1.close?.();
-    fn();
-  };
-  port2.postMessage(null);
 }

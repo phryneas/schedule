@@ -1,17 +1,14 @@
+import { ScheduleController } from "../src/index.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { async, getSignal, makeSchedulable, syncAware } from "../src/index.ts";
 import type { SchedulableIterable, ScheduleSignal } from "../src/types.ts";
 
 test("getSignal preserves the supplied signal across repeated acquisitions", async () => {
-  const signal: ScheduleSignal = {
-    aborted: false,
-    shouldYield: false,
-    throwIfAborted() {},
-    addEventListener() {},
-    removeEventListener() {},
-    bump() {},
-  };
+  const signal = new (class extends ScheduleController {
+      protected override get shouldYield() { return false; }
+      protected override bump() {}
+    })().signal;
   const work = makeSchedulable(function* (): SchedulableIterable<ScheduleSignal> {
     const first = yield* getSignal;
     assert.equal(yield* getSignal, first);
@@ -30,10 +27,11 @@ test("getSignal creates a command", () => {
 
 test("getSignal forwards abort event subscriptions to the supplied AbortSignal", async () => {
   const controller = new AbortController();
+  const scheduled = new ScheduleController({ signal: controller.signal });
   const work = makeSchedulable(function* () {
     return yield* getSignal;
   });
-  const signal = await async(work.schedulable(), { signal: controller.signal });
+  const signal = await async(work.schedulable(), { signal: scheduled.signal });
   let calls = 0;
   const listener = () => { calls++; };
   const removed = () => assert.fail("removed listener must not run");

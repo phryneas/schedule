@@ -1,3 +1,4 @@
+import { ScheduleController } from "../../schedule/src/index.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -103,10 +104,9 @@ export function run(fn: (this: { value: number }) => number, receiver: { value: 
   ], { encoding: "utf8" });
   assert.equal(compilation.status, 0, compilation.stdout + compilation.stderr);
   const { run } = await import(pathToFileURL(generated).href);
-  const signal = {
-    shouldYield: false, aborted: false, throwIfAborted() {}, bump() {},
-    addEventListener() {}, removeEventListener() {},
-  };
+  const signal = new (class extends ScheduleController {
+    protected override get shouldYield() { return false; }
+  })().signal;
   const callback = makeSchedulable(function* (this: { value: number }) {
     assert.equal(yield* commands.getSignal, signal);
     yield* commands.yieldNow;

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { ScheduleController } from "../../schedule/src/index.ts";
 import test from "node:test";
 import { transformSource } from "../src/index.ts";
 import { async as scheduled, execute } from "../../schedule/src/index.ts";
@@ -41,14 +42,10 @@ test("cancellation completes finally loops and synchronous cleanup calls", async
     release(this: unknown, log: unknown[]) { log.push('released'); },
   }), {
     startImmediately: true,
-    signal: {
-      get aborted() { return controller.signal.aborted; },
-      throwIfAborted() { controller.signal.throwIfAborted(); },
-      addEventListener: controller.signal.addEventListener.bind(controller.signal),
-      removeEventListener: controller.signal.removeEventListener.bind(controller.signal),
-      shouldYield: true,
-      bump() {},
-    },
+    signal: new (class extends ScheduleController {
+      protected override get shouldYield() { return true; }
+      protected override bump() {}
+    })({ signal: controller.signal }).signal,
   });
   controller.abort(reason);
   await assert.rejects(pending, error => error === reason);

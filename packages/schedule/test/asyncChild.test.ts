@@ -1,3 +1,4 @@
+import { ScheduleController } from "../src/index.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { async, commands, makeSchedulable } from "../src/index.ts";
@@ -174,14 +175,10 @@ for (const immediate of [true, false]) {
       }
       finished = true;
     });
-    const signal = {
-      aborted: false,
-      shouldYield: false,
-      throwIfAborted() {},
-      addEventListener() {},
-      removeEventListener() {},
-      bump() {},
-    };
+    const signal = new (class extends ScheduleController {
+      protected override get shouldYield() { return false; }
+      protected override bump() {}
+    })().signal;
     const pending = async(parent.schedulable(), { signal, startImmediately: true });
     assert.equal(finished, true);
     await pending;
@@ -227,14 +224,10 @@ for (const immediate of [true, false]) {
       const secondResult = yield* second.schedulable();
       return Promise.all([firstResult, secondResult]);
     });
-    const signal = {
-      aborted: false,
-      shouldYield: false,
-      throwIfAborted() {},
-      addEventListener() {},
-      removeEventListener() {},
-      bump() {},
-    };
+    const signal = new (class extends ScheduleController {
+      protected override get shouldYield() { return false; }
+      protected override bump() {}
+    })().signal;
     const pending = async(parent.schedulable(), { signal, startImmediately: true });
     try {
       assert.deepEqual(events, ["first", "second"]);

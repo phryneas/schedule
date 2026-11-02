@@ -8,6 +8,7 @@ import {
   yieldNow,
   execute,
   syncAware,
+  ScheduleController,
 } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 import type { ScheduleSignal } from "../src/types.ts";
@@ -15,16 +16,7 @@ import type { ScheduleSignal } from "../src/types.ts";
 for (const signalKind of ["AbortSignal", "ScheduleSignal"] as const) {
   function wrapSignal(signal: AbortSignal): AbortSignal | ScheduleSignal {
     if (signalKind === "AbortSignal") return signal;
-    return {
-      get aborted() {
-        return signal.aborted;
-      },
-      throwIfAborted: signal.throwIfAborted.bind(signal),
-      addEventListener: signal.addEventListener.bind(signal),
-      removeEventListener: signal.removeEventListener.bind(signal),
-      shouldYield: false,
-      bump() {},
-    };
+    return new ScheduleController({ signal }).signal;
   }
 
   test(`${signalKind}: syncAware removes abort listeners on settlement and observes late rejections`, async () => {
@@ -37,7 +29,9 @@ for (const signalKind of ["AbortSignal", "ScheduleSignal"] as const) {
       const controller = new AbortController();
       const reason = new Error(outcome);
       const operation = Promise.withResolvers<number>();
+      let activeSignal: ScheduleSignal;
       const work = makeSchedulable(function* () {
+        activeSignal = yield* getSignal;
         return yield* syncAware({
           sync: () => 42,
           async: () => {
@@ -52,7 +46,7 @@ for (const signalKind of ["AbortSignal", "ScheduleSignal"] as const) {
         startImmediately: true,
       });
       if (outcome !== "abort in callback") {
-        assert.equal(getEventListeners(controller.signal, "abort").length, 1);
+        assert.equal(getEventListeners(activeSignal!, "abort").length, 1);
       }
       if (outcome === "resolve") {
         operation.resolve(42);
@@ -65,7 +59,7 @@ for (const signalKind of ["AbortSignal", "ScheduleSignal"] as const) {
         // The external operation can still fail after the scheduler has cancelled.
         operation.reject(new Error("late external failure"));
       }
-      assert.equal(getEventListeners(controller.signal, "abort").length, 0);
+      assert.equal(getEventListeners(activeSignal!, "abort").length, 0);
     }
   });
 
@@ -203,24 +197,17 @@ test("cancellation during a scheduling wait closes active frames with a custom s
     const controller = new AbortController();
     const reason = new Error(`cancelled during ${command}`);
     const events: string[] = [];
-    const signal: ScheduleSignal = {
-      get aborted() {
-        return controller.signal.aborted;
-      },
-      throwIfAborted() {
-        controller.signal.throwIfAborted();
-      },
-      addEventListener: controller.signal.addEventListener.bind(controller.signal),
-      removeEventListener: controller.signal.removeEventListener.bind(controller.signal),
-      shouldYield: false,
-      bump() {
+    let expired = false;
+    const signal = new (class extends ScheduleController {
+      protected override get shouldYield() { return expired; }
+      protected override bump() {
         events.push("bump");
-      },
-    };
+      }
+    })({ signal: controller.signal }).signal;
     const child = makeSchedulable(function* () {
       try {
         events.push("entered");
-        signal.shouldYield = true;
+        expired = true;
         if (command === "yield") {
           yield* yieldNow;
         } else if (command === "execute") {

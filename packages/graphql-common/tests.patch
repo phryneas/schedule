@@ -2,7 +2,7 @@ diff --git a/src/language/__tests__/parser-test.ts b/src/language/__tests__/pars
 index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd0e0f8b6b 100644
 --- a/src/language/__tests__/parser-test.ts
 +++ b/src/language/__tests__/parser-test.ts
-@@ -1,5 +1,12 @@
+@@ -1,5 +1,13 @@
  import { describe, it } from 'node:test';
  
 +import {
@@ -10,12 +10,13 @@ index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd
 +  commands,
 +  makeSchedulable,
 +  isSchedulableFunction,
++  ScheduleController,
 +  type SchedulableIterable,
 +} from '@phryneas/schedule';
  import { expect } from 'chai';
  
  import { dedent } from '../../__testUtils__/dedent.ts';
-@@ -13,6 +20,7 @@ import { kitchenSinkQuery } from '../../__testUtils__/kitchenSinkQuery.ts';
+@@ -13,6 +21,7 @@ import { kitchenSinkQuery } from '../../__testUtils__/kitchenSinkQuery.ts';
  import { inspect } from '../../jsutils/inspect.ts';
  
 +import type { DefinitionNode } from '../ast.ts';
@@ -23,7 +24,7 @@ index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd
  import {
    parse,
    parseConstValue,
-@@ -24,6 +32,7 @@ import {
+@@ -24,6 +33,7 @@ import {
    parseSchemaCoordinate,
    parseType,
    parseValue,
@@ -31,7 +32,7 @@ index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd
  } from '../parser.ts';
  import { Source } from '../source.ts';
  import { TokenKind } from '../tokenKind.ts';
-@@ -33,6 +42,59 @@ function expectSyntaxError(text: string, options?: ParseOptions) {
+@@ -33,6 +43,55 @@ function expectSyntaxError(text: string, options?: ParseOptions) {
  }
  
  describe('Parser', () => {
@@ -59,20 +60,16 @@ index d31b95d6db9b3f26b094e3f121ec4eab1b591fe4..272efc7be6465d94f76dec3a5baf70bd
 +        Parser.prototype.parseDefinition = original;
 +      });
 +      let expired = true;
-+      const signal = {
-+        aborted: false,
-+        throwIfAborted() {},
-+        addEventListener() {},
-+        removeEventListener() {},
-+        get shouldYield() {
++      const signal = new (class extends ScheduleController {
++        protected override get shouldYield() {
 +          events.push('check');
 +          return expired;
-+        },
-+        bump() {
++        }
++        protected override bump() {
 +          events.push('yield');
 +          expired = false;
-+        },
-+      };
++        }
++      })().signal;
 +      const run = makeSchedulable(function* () {
 +        return yield* commands.execute(parse, true)(source);
 +      });
@@ -95,18 +92,19 @@ diff --git a/src/language/__tests__/visitor-test.ts b/src/language/__tests__/vis
 index f6f05199a057ce2a245fef6be90833e2b3f23ca9..ad74ac110ec23c74499ec8d1a8761fe6a3fd05d8 100644
 --- a/src/language/__tests__/visitor-test.ts
 +++ b/src/language/__tests__/visitor-test.ts
-@@ -1,5 +1,10 @@
+@@ -1,5 +1,11 @@
  import { describe, it } from 'node:test';
  
 +import {
 +  async as scheduled,
 +  commands,
 +  makeSchedulable,
++  ScheduleController,
 +} from '@phryneas/schedule';
  import { expect } from 'chai';
  
  import { kitchenSinkQuery } from '../../__testUtils__/kitchenSinkQuery.ts';
-@@ -57,6 +62,56 @@ function getValue(node: ASTNode) {
+@@ -57,6 +63,52 @@ function getValue(node: ASTNode) {
  }
  
  describe('Visitor', () => {
@@ -133,14 +131,10 @@ index f6f05199a057ce2a245fef6be90833e2b3f23ca9..ad74ac110ec23c74499ec8d1a8761fe6
 +
 +  it('retains the scheduler signal and receiver through visitor dispatch', async () => {
 +    const ast = parse('{ a }');
-+    const signal = {
-+      shouldYield: false,
-+      aborted: false,
-+      throwIfAborted() {},
-+      addEventListener() {},
-+      removeEventListener() {},
-+      bump() {},
-+    };
++    const signal = new (class extends ScheduleController {
++      protected override get shouldYield() { return false; }
++      protected override bump() {}
++    })().signal;
 +    const names: Array<string> = [];
 +    const visitor: ASTVisitor = {
 +      Name: makeSchedulable(function* (this: ASTVisitor, node: ASTNode) {
@@ -163,7 +157,7 @@ index f6f05199a057ce2a245fef6be90833e2b3f23ca9..ad74ac110ec23c74499ec8d1a8761fe6
    it('handles empty visitor', () => {
      const ast = parse('{ a }', { noLocation: true });
      expect(() => visit(ast, {})).to.not.throw();
-@@ -938,6 +993,39 @@ describe('Visitor', () => {
+@@ -938,6 +990,39 @@ describe('Visitor', () => {
    });
  
    describe('visitInParallel', () => {

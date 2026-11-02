@@ -1,3 +1,4 @@
+import { ScheduleController } from "../../schedule/src/index.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { transformSync } from "@babel/core";
@@ -50,12 +51,10 @@ export function work(fn) { return child(fn); }`, {
   const { work } = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
   const events: string[] = [];
   let expired = true;
-  const signal = {
-    aborted: false, throwIfAborted() {},
-    addEventListener() {}, removeEventListener() {},
-    get shouldYield() { return expired; },
-    bump() { expired = false; events.push("yield"); },
-  };
+  const signal = new (class extends ScheduleController {
+    protected override get shouldYield() { return expired; }
+    protected override bump() { expired = false; events.push("yield"); }
+  })().signal;
   assert.equal(await scheduled(work.schedulable(() => { events.push("call"); return 42; }), { signal }), 42);
   assert.deepEqual(events, ["yield", "call"]);
 });
@@ -107,12 +106,10 @@ test("explicit functions keep manual checkpoints and execute their calls synchro
   const { work } = await import(`data:text/javascript;base64,${Buffer.from(output).toString("base64")}`);
   const events: string[] = [];
   let expired = true;
-  const signal = {
-    aborted: false, throwIfAborted() {},
-    addEventListener() {}, removeEventListener() {},
-    get shouldYield() { return expired; },
-    bump() { expired = false; events.push("yield"); },
-  };
+  const signal = new (class extends ScheduleController {
+    protected override get shouldYield() { return expired; }
+    protected override bump() { expired = false; events.push("yield"); }
+  })().signal;
   const result = await scheduled(work.schedulable((value: number) => { events.push("call"); return value + 1; }), { signal });
   assert.equal(result, 4);
   assert.deepEqual(events, ["yield", "call"]);

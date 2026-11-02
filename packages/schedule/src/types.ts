@@ -50,4 +50,5 @@ export interface ScheduleSignal extends Pick<
 > {
   shouldYield: boolean;
   bump: () => void;
+  schedule: (callback: () => void) => void;
 }
