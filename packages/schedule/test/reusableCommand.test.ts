@@ -62,7 +62,7 @@ test("overlapping asynchronous runs retain their own signals across yields", asy
   const results = await Promise.all(signals.map(signal => async(work.schedulable(), { signal })));
   signals.forEach((signal, i) => {
     assert.equal(results[i], signal);
-    assert.equal(controllers[i]!.bumps, 3);
+    assert.equal(controllers[i]!.bumps, 4);
   });
 });
 

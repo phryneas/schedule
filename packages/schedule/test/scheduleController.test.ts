@@ -84,7 +84,7 @@ test("scheduler forwards initial entry and every scheduling boundary to subclass
   }
   assert.equal(await pending, 42);
   assert.deepEqual(events, ["entered", "execute", "syncAware"]);
-  assert.equal(controller.bumps, 3);
+  assert.equal(controller.bumps, 4);
   controller.expired = true;
   assert.equal(controller.signal.shouldYield, true);
   const { bump } = controller.signal;

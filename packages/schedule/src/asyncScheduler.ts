@@ -24,7 +24,7 @@ export async function async<T, EmittedValue = never>(
   try {
     if (!startImmediately) {
       await new Promise<void>((resolve) => scheduleSignal.schedule(resolve));
-      if (controller) scheduleSignal.bump();
+      scheduleSignal.bump();
     }
     scheduleSignal.throwIfAborted();
     return await executeIterableAsync(iterable, scheduleSignal, onValue);

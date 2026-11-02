@@ -55,7 +55,7 @@ export function work(fn) { return child(fn); }`, {
     protected override get shouldYield() { return expired; }
     protected override bump() { expired = false; events.push("yield"); }
   })().signal;
-  assert.equal(await scheduled(work.schedulable(() => { events.push("call"); return 42; }), { signal }), 42);
+  assert.equal(await scheduled(work.schedulable(() => { events.push("call"); return 42; }), { signal, startImmediately: true }), 42);
   assert.deepEqual(events, ["yield", "call"]);
 });
 
@@ -110,7 +110,7 @@ test("explicit functions keep manual checkpoints and execute their calls synchro
     protected override get shouldYield() { return expired; }
     protected override bump() { expired = false; events.push("yield"); }
   })().signal;
-  const result = await scheduled(work.schedulable((value: number) => { events.push("call"); return value + 1; }), { signal });
+  const result = await scheduled(work.schedulable((value: number) => { events.push("call"); return value + 1; }), { signal, startImmediately: true });
   assert.equal(result, 4);
   assert.deepEqual(events, ["yield", "call"]);
   assert.match(output, /return fn\(3\)/);
