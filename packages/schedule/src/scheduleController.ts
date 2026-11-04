@@ -1,18 +1,31 @@
 import type { ScheduleSignal } from "./types.ts";
 
+function defaultGetNextTime(): number {
+  return performance.now();
+}
+
 export class ScheduleController extends AbortController {
   private readonly scheduleSignal: AbortSignal & ScheduleSignal;
-  private nextYield = performance.now() + 16;
+  private nextYield: number;
   private detachParent: (() => void) | undefined;
+  private getNextTime: () => number;
 
-  constructor({ signal }: { signal?: AbortSignal } = {}) {
+  constructor({
+    signal,
+    getNextTime = defaultGetNextTime,
+  }: { signal?: AbortSignal; getNextTime?: () => number } = {}) {
     super();
     const controller = this;
     const nativeSignal = super.signal;
+    this.getNextTime = getNextTime;
+    this.nextYield = this.getNextTime() + 16;
     this.scheduleSignal = Object.defineProperties(nativeSignal, {
       shouldYield: { configurable: true, get: () => controller.shouldYield },
       bump: { configurable: true, value: () => controller.bump() },
-      schedule: { configurable: true, value: (callback: () => void) => controller.schedule(callback) },
+      schedule: {
+        configurable: true,
+        value: (callback: () => void) => controller.schedule(callback),
+      },
     }) as AbortSignal & ScheduleSignal;
     if (signal?.aborted) {
       super.abort(signal.reason);
@@ -43,11 +56,11 @@ export class ScheduleController extends AbortController {
 
   protected get shouldYield(): boolean {
     this.signal.throwIfAborted();
-    return performance.now() >= this.nextYield;
+    return this.getNextTime() >= this.nextYield;
   }
 
   protected bump(): void {
-    this.nextYield = performance.now() + 16;
+    this.nextYield = this.getNextTime() + 16;
   }
 
   protected schedule(callback: () => void): void {
