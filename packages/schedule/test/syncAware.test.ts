@@ -19,7 +19,6 @@ test("syncAware wrappers reuse arguments and receivers independently in both sch
       await Promise.resolve();
       return this.base + value;
     },
-    startImmediately: true,
   });
   const first = { base: 10 };
   const second = { base: 20 };
@@ -32,7 +31,6 @@ test("syncAware wrappers reuse arguments and receivers independently in both sch
   const result = add.call(first, 1).next();
   assert.equal(result.done, false);
   assert.equal(result.value.kind, "syncAware");
-  assert.equal(result.value.startImmediately, true);
 });
 
 test("syncAware reads a file and sums its lines in both modes", async () => {

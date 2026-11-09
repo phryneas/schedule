@@ -64,7 +64,7 @@ test("async delivers partial results before a pending operation completes", asyn
   const values: number[] = [];
   function* work() {
     yield* emit(1);
-    const result = yield* syncAware({ sync: () => 42, async: () => operation.promise, startImmediately: true })();
+    const result = yield* syncAware({ sync: () => 42, async: () => operation.promise })();
     yield* emit(result);
     return "done";
   }

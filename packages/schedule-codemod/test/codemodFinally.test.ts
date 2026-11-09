@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { ScheduleController } from "../../schedule/src/index.ts";
 import test from "node:test";
 import { transformSource } from "../src/index.ts";
-import { async as scheduled, execute } from "../../schedule/src/index.ts";
-import { schedulableImplementationSymbol } from "../../schedule/src/internal.ts";
+import { async as scheduled } from "../../schedule/src/index.ts";
+import { getSchedulableImplementation, schedulableImplementationSymbol } from "../../schedule/src/internal.ts";
 
 const runtimeModule = new URL("../../schedule/src/index.ts", import.meta.url).href;
 
@@ -38,7 +38,7 @@ test("cancellation completes finally loops and synchronous cleanup calls", async
   const controller = new AbortController();
   const reason = new Error("cancelled");
   const events: unknown[] = [];
-  const pending = scheduled(execute(module.work, true)(events, {
+  const pending = scheduled(getSchedulableImplementation(module.work)(events, {
     release(this: unknown, log: unknown[]) { log.push('released'); },
   }), {
     startImmediately: true,

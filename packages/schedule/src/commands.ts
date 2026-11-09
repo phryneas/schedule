@@ -24,7 +24,6 @@ export type Command<EmittedValue = never> =
       fn: (...args: Array<unknown>) => unknown;
       args: Array<unknown>;
       this?: unknown;
-      startImmediately?: boolean;
     }
   | {
       kind: "syncAware";
@@ -32,7 +31,6 @@ export type Command<EmittedValue = never> =
       async: (...args: Array<unknown>) => unknown;
       args: Array<unknown>;
       this?: unknown;
-      startImmediately?: boolean;
     };
 
 export const yieldNow: SchedulableIterable<void> = new ReusableCommand<void>(
@@ -54,7 +52,6 @@ export function execute<Fn extends (...args: any[]) => unknown>(
         >
       ? Fn
       : never,
-  startImmediately?: boolean,
 ): Fn extends SchedulableMarker<
   (...args: any[]) => SchedulableIterable<unknown, unknown>
 >
@@ -62,13 +59,11 @@ export function execute<Fn extends (...args: any[]) => unknown>(
   : MapResults<Fn, ToSchedulable>;
 export function execute<Ret, Args extends Array<unknown>, ThisArg>(
   fn: (this: ThisArg, ...args: Args) => Ret,
-  startImmediately?: boolean,
 ): (this: ThisArg, ...args: Args) => SchedulableIterable<Ret>;
 export function execute(
   fn: Function,
-  startImmediately?: boolean,
 ): (this: unknown, ...args: any[]) => SchedulableIterable<any>;
-export function execute(fn: Function, startImmediately = false) {
+export function execute(fn: Function) {
   return function executeCommand(
     this: unknown,
     ...args: unknown[]
@@ -78,7 +73,6 @@ export function execute(fn: Function, startImmediately = false) {
       fn: fn as any,
       args,
       this: this,
-      startImmediately,
     });
   };
 }
@@ -86,7 +80,6 @@ export function execute(fn: Function, startImmediately = false) {
 export const syncAware = <Ret, Args extends Array<unknown>, ThisArg>(options: {
   sync: (this: ThisArg, ...args: Args) => Ret;
   async: (this: ThisArg, ...args: Args) => Promise<Ret>;
-  startImmediately?: boolean;
 }): ((this: ThisArg, ...args: Args) => SchedulableIterable<Ret>) => {
   return function executeCommand(
     this: ThisArg,

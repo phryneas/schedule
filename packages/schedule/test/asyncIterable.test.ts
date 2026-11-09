@@ -52,7 +52,6 @@ test("direct iterable cancellation interrupts pending operations and closes the 
       yield* syncAware({
         sync() {},
         async: () => new Promise<void>(() => {}),
-        startImmediately: true,
       })();
     } finally {
       closed = true;

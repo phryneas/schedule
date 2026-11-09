@@ -29,7 +29,7 @@ expectTypeOf(commands.execute(generic).bind(receiver)(42)).toEqualTypeOf<Schedul
 
 declare const broad: Function;
 expectTypeOf(commands.execute(broad)(1, "text")).toEqualTypeOf<SchedulableIterable<any>>();
-expectTypeOf(commands.execute(broad, true).bind(receiver)()).toEqualTypeOf<SchedulableIterable<any>>();
+expectTypeOf(commands.execute(broad).bind(receiver)()).toEqualTypeOf<SchedulableIterable<any>>();
 declare const dynamic: Record<string, unknown>;
 if (typeof dynamic.toJSON === "function") {
   expectTypeOf(commands.execute(dynamic.toJSON).bind(dynamic)()).toEqualTypeOf<SchedulableIterable<any>>();

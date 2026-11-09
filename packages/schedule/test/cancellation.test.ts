@@ -38,7 +38,6 @@ for (const signalKind of ["AbortSignal", "ScheduleSignal"] as const) {
             if (outcome === "abort in callback") controller.abort(reason);
             return operation.promise;
           },
-          startImmediately: true,
         })();
       });
       const pending = async(work.schedulable(), {
@@ -75,7 +74,6 @@ for (const signalKind of ["AbortSignal", "ScheduleSignal"] as const) {
           yield* syncAware({
             sync() {},
             async: () => new Promise<void>(() => {}),
-            startImmediately: true,
           })();
           events.push("resumed");
         } catch {
@@ -86,7 +84,7 @@ for (const signalKind of ["AbortSignal", "ScheduleSignal"] as const) {
       });
       const parent = makeSchedulable(function* () {
         try {
-          yield* execute(child, true)();
+          yield* execute(child)();
         } finally {
           events.push("parent closed");
         }
@@ -125,7 +123,7 @@ test("cancellation while advancing an iterator is terminal", async () => {
             controller.abort(reason);
           }
           if (!returnImmediately) {
-            yield* execute(() => events.push("callback after cancellation"), true)();
+            yield* execute(() => events.push("callback after cancellation"))();
           }
           return 42;
         } finally {
@@ -231,7 +229,7 @@ test("cancellation during a scheduling wait closes active frames with a custom s
     });
     const parent = makeSchedulable(function* () {
       try {
-        yield* execute(child, true)();
+        yield* execute(child)();
         events.push("parent resumed");
       } finally {
         events.push("parent closed");

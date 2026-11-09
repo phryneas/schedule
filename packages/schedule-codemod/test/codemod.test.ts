@@ -9,6 +9,7 @@ import { transformSync } from "@babel/core";
 import plugin from "../src/transform.ts";
 import { async as scheduled, commands, makeSchedulable } from "../../schedule/src/index.ts";
 import * as graphql from "graphql";
+import { getSchedulableImplementation } from "../../schedule/src/internal.ts";
 
 const runtimeModule = new URL("../../schedule/src/index.ts", import.meta.url).href;
 
@@ -46,9 +47,9 @@ test("dynamic ordinary calls keep a deadline boundary and evaluate calls conditi
     protected override get shouldYield() { return expired; }
     protected override bump() { expired = false; events.push("yielded"); }
   })().signal;
-  assert.equal(await scheduled(commands.execute(module.run, true)(object, argument, false), { signal, startImmediately: true }), false);
+  assert.equal(await scheduled(getSchedulableImplementation(module.run)(object, argument, false), { signal, startImmediately: true }), false);
   assert.deepEqual(events, []);
-  const pending = scheduled(commands.execute(module.run, true)(object, argument, true), { signal, startImmediately: true });
+  const pending = scheduled(getSchedulableImplementation(module.run)(object, argument, true), { signal, startImmediately: true });
   assert.deepEqual(events, []);
   assert.equal(await pending, 10);
   assert.deepEqual(events, ["yielded", "get", "argument", "call"]);
