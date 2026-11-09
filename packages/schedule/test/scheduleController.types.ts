@@ -2,7 +2,8 @@ import { expectTypeOf } from "expect-type";
 import { ScheduleController, type ScheduleSignal } from "../src/index.ts";
 
 const controller = new ScheduleController({ signal: new AbortController().signal });
-expectTypeOf(controller.signal).toEqualTypeOf<AbortSignal & ScheduleSignal>();
+expectTypeOf(controller.signal).toEqualTypeOf<ScheduleSignal>();
+expectTypeOf<ScheduleSignal>().toExtend<AbortSignal>();
 expectTypeOf(controller.signal).toExtend<AbortSignal>();
 // @ts-expect-error Scheduling hooks are protected on the controller.
 controller.shouldYield;
@@ -16,15 +17,4 @@ class CustomController extends ScheduleController {
   protected override bump() { super.bump(); }
   protected override schedule(callback: () => void) { super.schedule(callback); }
 }
-expectTypeOf(new CustomController().signal).toEqualTypeOf<AbortSignal & ScheduleSignal>();
-
-const plainSignal: ScheduleSignal = {
-  aborted: false,
-  shouldYield: false,
-  throwIfAborted() {},
-  addEventListener() {},
-  removeEventListener() {},
-  bump() {},
-  schedule(callback) { callback(); },
-};
-expectTypeOf(plainSignal).toEqualTypeOf<ScheduleSignal>();
+expectTypeOf(new CustomController().signal).toEqualTypeOf<ScheduleSignal>();

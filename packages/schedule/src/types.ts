@@ -44,10 +44,7 @@ export type SchedulableMethod<Fn extends (this: any, ...args: any[]) => unknown,
     ? SchedulableMethodSignature<ThisArg, Args, Ret, EmittedValue>
     : never;
 
-export interface ScheduleSignal extends Pick<
-  AbortSignal,
-  "aborted" | "throwIfAborted" | "addEventListener" | "removeEventListener"
-> {
+export interface ScheduleSignal extends AbortSignal {
   shouldYield: boolean;
   bump: () => void;
   schedule: (callback: () => void) => void;

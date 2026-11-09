@@ -5,7 +5,7 @@ function defaultGetNextTime(): number {
 }
 
 export class ScheduleController extends AbortController {
-  private readonly scheduleSignal: AbortSignal & ScheduleSignal;
+  private readonly scheduleSignal: ScheduleSignal;
   private nextYield: number;
   private detachParent: (() => void) | undefined;
   private getNextTime: () => number;
@@ -26,7 +26,7 @@ export class ScheduleController extends AbortController {
         configurable: true,
         value: (callback: () => void) => controller.schedule(callback),
       },
-    }) as AbortSignal & ScheduleSignal;
+    }) as ScheduleSignal;
     if (signal?.aborted) {
       super.abort(signal.reason);
     } else if (signal) {
@@ -50,7 +50,7 @@ export class ScheduleController extends AbortController {
     this.detachParent = undefined;
   }
 
-  override get signal(): AbortSignal & ScheduleSignal {
+  override get signal(): ScheduleSignal {
     return this.scheduleSignal;
   }
 

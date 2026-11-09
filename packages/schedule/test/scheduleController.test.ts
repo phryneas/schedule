@@ -116,13 +116,36 @@ test("caller-owned controllers stay connected after the scheduler finishes", asy
   assert.equal(controller.signal.reason, "after completion");
 });
 
-test("synchronous execution uses a plain signal and never requests a yield", () => {
+test("synchronous execution uses an AbortSignal and never requests a yield", () => {
   const signal = sync(getSignal);
-  assert.equal(Object.getPrototypeOf(signal), Object.prototype);
+  assert.ok(signal instanceof AbortSignal);
   assert.equal(signal.shouldYield, false);
   signal.bump();
   assert.equal(signal.shouldYield, false);
   let called = false;
   signal.schedule(() => { called = true; });
   assert.equal(called, false);
+});
+
+test("signals from both schedulers can be passed directly to fetch", async () => {
+  const controller = new ScheduleController();
+  const signals = [
+    sync(getSignal),
+    await async(getSignal),
+    await async(getSignal, { signal: controller.signal }),
+  ];
+  for (const signal of signals) {
+    assert.ok(signal instanceof AbortSignal);
+    const response = await fetch("data:text/plain,scheduled", { signal });
+    assert.equal(await response.text(), "scheduled");
+  }
+
+  const reason = new Error("fetch cancelled");
+  const pending = fetch("data:text/plain,scheduled", { signal: controller.signal });
+  controller.abort(reason);
+  await assert.rejects(pending, error => error === reason);
+  await assert.rejects(
+    fetch("data:text/plain,scheduled", { signal: controller.signal }),
+    error => error === reason,
+  );
 });
