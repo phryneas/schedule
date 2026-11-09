@@ -2,5 +2,6 @@
   "major": 16,
   "base": "dca5b4d4507dc3d324dc83aa39f359db3ab1a141",
   "baseTag": "v16.14.2",
-  "patches": ["changes.patch"]
+  "patches": ["changes.patch"],
+  "compatibilityPatches": [{ "since": "16.15.0", "patch": "compatibility.patch" }]
 }

@@ -1,0 +1,62 @@
+diff --git a/src/execution/collectFields.ts b/src/execution/collectFields.ts
+index fda4fd12..c526e15f 100644
+--- a/src/execution/collectFields.ts
++++ b/src/execution/collectFields.ts
+@@ -97,7 +97,7 @@ export function collectFields(
+   selectionSet: SelectionSetNode,
+   hideSuggestions: boolean,
+   forbidSkipAndInclude = false,
+-  visit: typeof visitSelectionSets = visitSelectionSets,
++  visit: VisitSelectionSets = visitSelectionSets,
+ ): {
+   groupedFieldSet: GroupedFieldSet;
+   newDeferUsages: ReadonlyArray<DeferUsage>;
+@@ -181,6 +181,18 @@ export function collectSubfields(
+   };
+ }
+ 
++/** @internal */
++// eslint-disable-next-line max-params
++export type VisitSelectionSets = (
++  context: CollectFieldsContext,
++  selectionSet: SelectionSetNode,
++  groupedFieldSet: AccumulatorMap<string, FieldDetails>,
++  newDeferUsages: Array<DeferUsage>,
++  deferUsage?: DeferUsage,
++  fragmentVariableValues?: FragmentVariableValues,
++  recurse?: VisitSelectionSets,
++) => void;
++
+ /** @internal */
+ // eslint-disable-next-line max-params
+ export function visitSelectionSets(
+@@ -190,7 +202,7 @@ export function visitSelectionSets(
+   newDeferUsages: Array<DeferUsage>,
+   deferUsage?: DeferUsage,
+   fragmentVariableValues?: FragmentVariableValues,
+-  recurse: typeof visitSelectionSets = visitSelectionSets,
++  recurse: VisitSelectionSets = visitSelectionSets,
+ ): void {
+   const {
+     schema,
+diff --git a/src/validation/rules/SingleFieldSubscriptionsRule.ts b/src/validation/rules/SingleFieldSubscriptionsRule.ts
+index fee622e9..b74bb9ab 100644
+--- a/src/validation/rules/SingleFieldSubscriptionsRule.ts
++++ b/src/validation/rules/SingleFieldSubscriptionsRule.ts
+@@ -13,6 +13,7 @@ import { GraphQLDeferDirective } from '../../type/directives.ts';
+ import type {
+   FieldDetailsList,
+   FragmentDetails,
++  VisitSelectionSets,
+ } from '../../execution/collectFields.ts';
+ import {
+   collectFields,
+@@ -73,7 +74,7 @@ export function SingleFieldSubscriptionsRule(
+ ): ASTVisitor {
+   let fragments: ObjMap<FragmentDetails> | undefined;
+   // Reserve traversal and directive work before visiting each selection set.
+-  const visitSelectionSets: typeof visitSelectionSetsImpl = (
++  const visitSelectionSets: VisitSelectionSets = (
+     visitContext,
+     selectionSet,
+     groupedFieldSet,

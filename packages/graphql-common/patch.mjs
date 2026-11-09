@@ -4,7 +4,7 @@ import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { git, root, orig, patched } from "./common.mjs";
-import { continueLane, laneDirectory, prepareLane, rebaseInProgress } from "./lanes.mjs";
+import { applyCompatibilityPatches, continueLane, laneDirectory, prepareLane, rebaseInProgress } from "./lanes.mjs";
 
 const { values: args } = parseArgs({
   options: {
@@ -38,6 +38,7 @@ const npm = (args, cwd = patched) => execFileSync("npm", args, {
 });
 const manifest = JSON.parse(await readFile(join(patched, "package.json"), "utf8"));
 const major = Number(manifest.version.split(".")[0]);
+await applyCompatibilityPatches(patched, laneDirectory(root, String(major)));
 const settings = [
   "name=@phryneas/scheduled-graphql",
   `dependencies.@phryneas/schedule=${process.env.SCHEDULE_PACKAGE ?? "https://pkg.pr.new/phryneas/schedule/@phryneas/schedule@2f05950"}`,

@@ -1,0 +1,15 @@
+diff --git a/resources/node-vm.d.ts b/resources/node-vm.d.ts
+deleted file mode 100644
+index 0fa87382..00000000
+--- a/resources/node-vm.d.ts
++++ /dev/null
+@@ -1,9 +0,0 @@
+-export {};
+-
+-// Node 17's type definitions omit this experimental API. The runner uses only
+-// construction to validate module syntax, with --experimental-vm-modules.
+-declare module 'vm' {
+-  class SourceTextModule {
+-    constructor(code: string, options: { identifier: string });
+-  }
+-}

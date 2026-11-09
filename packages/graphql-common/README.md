@@ -41,6 +41,17 @@ Temporary and unresolved cache entries are not exported. Normal replay never
 updates the tracked records. Use a consistent Git version in automation; replay
 is tested with Git 2.54.0. A reused resolution still needs build/test validation.
 
+After replay, `patch.mjs` applies any `compatibilityPatches` listed in the lane's
+configuration. Each entry names a patch and a `since` stable release; it applies
+to that release and subsequent releases in the same major. These patches handle
+new upstream files or type signatures that need adaptations even when replay
+does not conflict. A patch that no longer applies stops preparation for review.
+
+The 16.15.0 compatibility patch removes an older-Node VM declaration shim that
+duplicates the Node 24 types used by this fork. The 17.1.0 patch gives selection
+set visitor callbacks a separate recursive callable type, avoiding a circular
+type after the scheduler codemod adds the `schedulable` property.
+
 To edit a lane's starting patch, prepare its base release, edit `patched`, and run
 `update-patches.mjs`. On later releases, that command only permits exporting
 resolutions with `--resolutions`, to avoid replacing the base patch with a

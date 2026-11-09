@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import semver from "semver";
 
 // Keep identity and hooks independent of the operator's Git configuration.
 const gitOptions = [
@@ -105,4 +106,18 @@ export async function saveResolutions(directory, lane) {
     throw new Error("Finish the rebase before exporting resolutions.");
   }
   await copyResolutions(cachePath(directory), join(lane, "resolutions"));
+}
+
+// Adapt files introduced by newer releases after replaying the base patch.
+export async function applyCompatibilityPatches(directory, lane) {
+  const config = JSON.parse(await readFile(join(lane, "lane.json"), "utf8"));
+  const { version } = JSON.parse(await readFile(join(directory, "package.json"), "utf8"));
+  if (Number(version.split(".")[0]) !== config.major) {
+    throw new Error(`Lane ${config.major} cannot patch GraphQL ${version}.`);
+  }
+  for (const { since, patch } of config.compatibilityPatches ?? []) {
+    if (semver.gte(version, since)) {
+      git(directory, ["apply", resolve(lane, patch)]);
+    }
+  }
 }
