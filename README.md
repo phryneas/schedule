@@ -196,6 +196,9 @@ depending on how your function is run, and get its result.
 In async mode, the scheduler awaits the async implementation before resuming
 the caller.
 
+The `sync` implementation is optional. If omitted, synchronous execution throws
+an error stating that synchronous execution is not supported for this command.
+
 The returned wrapper can be reused across calls and schedulers. Use `.call` or
 `.bind` when the implementations need a receiver.
 

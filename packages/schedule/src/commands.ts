@@ -78,7 +78,7 @@ export function execute(fn: Function) {
 }
 
 export const syncAware = <Ret, Args extends Array<unknown>, ThisArg>(options: {
-  sync: (this: ThisArg, ...args: Args) => Ret;
+  sync?: (this: ThisArg, ...args: Args) => Ret;
   async: (this: ThisArg, ...args: Args) => Promise<Ret>;
 }): ((this: ThisArg, ...args: Args) => SchedulableIterable<Ret>) => {
   return function executeCommand(
@@ -88,8 +88,13 @@ export const syncAware = <Ret, Args extends Array<unknown>, ThisArg>(options: {
     return new SingleCommand<Ret>({
       kind: "syncAware" as const,
       ...(options as any),
+      sync: options.sync ?? unsupportedSync,
       args,
       this: this,
     });
   };
 };
+
+function unsupportedSync(): never {
+  throw new Error("Synchronous execution is not supported for this syncAware command.");
+}

@@ -7,6 +7,25 @@ import { fileURLToPath } from "node:url";
 import { makeSchedulable, async, syncAware, getSignal, yieldNow } from "../src/index.ts";
 import type { SchedulableIterable } from "../src/index.ts";
 
+test("syncAware supports async-only operations and rejects synchronous execution", async () => {
+  let calls = 0;
+  const operation = syncAware({
+    async async(this: { base: number }, value: number) {
+      calls++;
+      return this.base + value;
+    },
+  });
+  const work = makeSchedulable(function* () {
+    return yield* operation.call({ base: 40 }, 2);
+  });
+  assert.throws(() => work(), {
+    message: "Synchronous execution is not supported for this syncAware command.",
+  });
+  assert.equal(calls, 0);
+  assert.equal(await async(work.schedulable()), 42);
+  assert.equal(calls, 1);
+});
+
 test("syncAware wrappers reuse arguments and receivers independently in both schedulers", async () => {
   const calls: string[] = [];
   const add = syncAware({
